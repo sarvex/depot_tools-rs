@@ -48,16 +48,13 @@ def CMDmovechanges(parser, args):
   (opt, args) = parser.parse_args(args)
   assert opt.destination_branch, "--destination_branch not defined"
   for p in opt.params:
-    assert '=' in p, '--param is key=value, not "%s"' % p
+    assert '=' in p, f'--param is key=value, not "{p}"'
   host = urlparse.urlparse(opt.host).netloc
 
   limit = 100
   while True:
     result = gerrit_util.QueryChanges(
-        host,
-        list(tuple(p.split('=', 1)) for p in opt.params),
-        limit=limit,
-    )
+        host, [tuple(p.split('=', 1)) for p in opt.params], limit=limit)
     for change in result:
       gerrit_util.MoveChange(host, change['id'], opt.destination_branch)
 
@@ -191,14 +188,14 @@ def CMDchanges(parser, args):
 
   (opt, args) = parser.parse_args(args)
   for p in opt.params:
-    assert '=' in p, '--param is key=value, not "%s"' % p
+    assert '=' in p, f'--param is key=value, not "{p}"'
 
   result = gerrit_util.QueryChanges(
       urlparse.urlparse(opt.host).netloc,
-      list(tuple(p.split('=', 1)) for p in opt.params),
-      start=opt.start,        # Default: None
-      limit=opt.limit,        # Default: None
-      o_params=opt.o_params,  # Default: None
+      [tuple(p.split('=', 1)) for p in opt.params],
+      start=opt.start,
+      limit=opt.limit,
+      o_params=opt.o_params,
   )
   logging.info('Change query returned %d changes.', len(result))
   write_result(result, opt)
@@ -243,9 +240,9 @@ def CMDcreatechange(parser, args):
 
   (opt, args) = parser.parse_args(args)
   for p in opt.params:
-    assert '=' in p, '--param is key=value, not "%s"' % p
+    assert '=' in p, f'--param is key=value, not "{p}"'
 
-  params = list(tuple(p.split('=', 1)) for p in opt.params)
+  params = [tuple(p.split('=', 1)) for p in opt.params]
 
   if opt.cc_list:
     params.append(('notify_details', {'CC': {'accounts': opt.cc_list}}))
@@ -400,13 +397,13 @@ def CMDmass_abandon(parser, args):
   opt, args = parser.parse_args(args)
 
   for p in opt.params:
-    assert '=' in p, '--param is key=value, not "%s"' % p
-  search_query = list(tuple(p.split('=', 1)) for p in opt.params)
+    assert '=' in p, f'--param is key=value, not "{p}"'
+  search_query = [tuple(p.split('=', 1)) for p in opt.params]
   if not any(t for t in search_query if t[0] == 'owner'):
     # owner should always be present when abandoning changes
     search_query.append(('owner', 'me'))
   search_query.append(('status', 'open'))
-  logging.info("Searching for: %s" % search_query)
+  logging.info(f"Searching for: {search_query}")
 
   host = urlparse.urlparse(opt.host).netloc
 
@@ -421,7 +418,7 @@ def CMDmass_abandon(parser, args):
     logging.warn("Nothing to abandon")
     return
 
-  logging.warn("%s CLs match search query: " % len(result))
+  logging.warn(f"{len(result)} CLs match search query: ")
   for change in result:
     logging.warn("[ID: %d] %s" % (change['_number'], change['subject']))
 
@@ -433,7 +430,7 @@ def CMDmass_abandon(parser, args):
       return
 
   for change in result:
-    logging.warning("Abandoning: %s" % change['subject'])
+    logging.warning(f"Abandoning: {change['subject']}")
     gerrit_util.AbandonChange(host, change['id'], opt.message)
 
   logging.warning("Done")

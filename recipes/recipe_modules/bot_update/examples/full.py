@@ -54,13 +54,13 @@ def RunSteps(api):
   })
 
   patch = api.properties.get('patch', True)
-  clobber = True if api.properties.get('clobber') else False
+  clobber = bool(api.properties.get('clobber'))
   with_branch_heads = api.properties.get('with_branch_heads', False)
   with_tags = api.properties.get('with_tags', False)
   refs = api.properties.get('refs', [])
   root_solution_revision = api.properties.get('root_solution_revision')
   suffix = api.properties.get('suffix')
-  gerrit_no_reset = True if api.properties.get('gerrit_no_reset') else False
+  gerrit_no_reset = bool(api.properties.get('gerrit_no_reset'))
   gerrit_no_rebase_patch_ref = bool(
       api.properties.get('gerrit_no_rebase_patch_ref'))
   patch_refs = api.properties.get('patch_refs')
@@ -68,8 +68,8 @@ def RunSteps(api):
   set_output_commit = api.properties.get('set_output_commit', True)
 
   step_test_data = None
-  bot_update_output = engine_types.thaw(api.properties.get('bot_update_output'))
-  if bot_update_output:
+  if bot_update_output := engine_types.thaw(
+      api.properties.get('bot_update_output')):
     step_test_data = lambda: api.json.test_api.output(bot_update_output)
   bot_update_step = api.bot_update.ensure_checkout(
       patch=patch,

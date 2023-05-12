@@ -62,7 +62,7 @@ class Checkout(object):
     pass
 
   def run(self, cmd, return_stdout=False, **kwargs):
-    print('Running: %s' % (' '.join(pipes.quote(x) for x in cmd)))
+    print(f"Running: {' '.join(pipes.quote(x) for x in cmd)}")
     if self.options.dry_run:
       return ''
     if return_stdout:
@@ -103,10 +103,8 @@ class GclientCheckout(Checkout):
 class GitCheckout(Checkout):
 
   def run_git(self, *cmd, **kwargs):
-    print('Running: git %s' % (' '.join(pipes.quote(x) for x in cmd)))
-    if self.options.dry_run:
-      return ''
-    return git_common.run(*cmd, **kwargs)
+    print(f"Running: git {' '.join(pipes.quote(x) for x in cmd)}")
+    return '' if self.options.dry_run else git_common.run(*cmd, **kwargs)
 
 
 class GclientGitCheckout(GclientCheckout, GitCheckout):
@@ -119,13 +117,14 @@ class GclientGitCheckout(GclientCheckout, GitCheckout):
     def _format_literal(lit):
       if isinstance(lit, str) or (sys.version_info.major == 2 and
                                   isinstance(lit, unicode)):
-        return '"%s"' % lit
+        return f'"{lit}"'
       if isinstance(lit, list):
-        return '[%s]' % ', '.join(_format_literal(i) for i in lit)
+        return f"[{', '.join(_format_literal(i) for i in lit)}]"
       return '%r' % lit
+
     soln_strings = []
     for soln in self.spec['solutions']:
-      soln_string = '\n'.join('    "%s": %s,' % (key, _format_literal(value))
+      soln_string = '\n'.join(f'    "{key}": {_format_literal(value)},'
                               for key, value in soln.items())
       soln_strings.append('  {\n%s\n  },' % soln_string)
     gclient_spec = 'solutions = [\n%s\n]\n' % '\n'.join(soln_strings)
@@ -149,7 +148,7 @@ class GclientGitCheckout(GclientCheckout, GitCheckout):
     # Configure git.
     wd = os.path.join(self.base, self.root)
     if self.options.dry_run:
-      print('cd %s' % wd)
+      print(f'cd {wd}')
     self.run_git(
         'submodule', 'foreach',
         'git config -f $toplevel/.git/config submodule.$name.ignore all',
@@ -170,10 +169,10 @@ CHECKOUT_TYPE_MAP = {
 
 def CheckoutFactory(type_name, options, spec, root):
   """Factory to build Checkout class instances."""
-  class_ = CHECKOUT_TYPE_MAP.get(type_name)
-  if not class_:
-    raise KeyError('unrecognized checkout type: %s' % type_name)
-  return class_(options, spec, root)
+  if class_ := CHECKOUT_TYPE_MAP.get(type_name):
+    return class_(options, spec, root)
+  else:
+    raise KeyError(f'unrecognized checkout type: {type_name}')
 
 def handle_args(argv):
   """Gets the config name from the command line arguments."""
@@ -183,14 +182,14 @@ def handle_args(argv):
   configs.sort()
 
   parser = argparse.ArgumentParser(
-    formatter_class=argparse.RawDescriptionHelpFormatter,
-    description='''
+      formatter_class=argparse.RawDescriptionHelpFormatter,
+      description='''
     This script can be used to download the Chromium sources. See
     http://www.chromium.org/developers/how-tos/get-the-code
     for full usage instructions.''',
-    epilog='Valid fetch configs:\n' + \
-      '\n'.join(map(lambda s: '  ' + s, configs))
-    )
+      epilog='Valid fetch configs:\n' +
+      '\n'.join(map(lambda s: f'  {s}', configs)),
+  )
 
   parser.add_argument('-n', '--dry-run', action='store_true', default=False,
     help='Don\'t run commands, only print them.')
@@ -223,9 +222,8 @@ def handle_args(argv):
 
   # props passed to config must be of the format --<name>=<value>
   looks_like_arg = lambda arg: arg.startswith('--') and arg.count('=') == 1
-  bad_param = [x for x in args.props if not looks_like_arg(x)]
-  if bad_param:
-    print('Error: Got bad arguments %s' % bad_param)
+  if bad_param := [x for x in args.props if not looks_like_arg(x)]:
+    print(f'Error: Got bad arguments {bad_param}')
     parser.print_help()
     sys.exit(1)
 
@@ -236,11 +234,11 @@ def run_config_fetch(config, props, aliased=False):
   and return its json output as a python object."""
   config_path = os.path.abspath(
       os.path.join(SCRIPT_PATH, 'fetch_configs', config))
-  if not os.path.exists(config_path + '.py'):
-    print("Could not find a config for %s" % config)
+  if not os.path.exists(f'{config_path}.py'):
+    print(f"Could not find a config for {config}")
     sys.exit(1)
 
-  cmd = [sys.executable, config_path + '.py', 'fetch'] + props
+  cmd = [sys.executable, f'{config_path}.py', 'fetch'] + props
   result = subprocess.Popen(cmd, stdout=subprocess.PIPE).communicate()[0]
 
   spec = json.loads(result.decode("utf-8"))
@@ -248,7 +246,7 @@ def run_config_fetch(config, props, aliased=False):
     assert not aliased
     return run_config_fetch(
         spec['alias']['config'], spec['alias']['props'] + props, aliased=True)
-  cmd = [sys.executable, config_path + '.py', 'root']
+  cmd = [sys.executable, f'{config_path}.py', 'root']
   result = subprocess.Popen(cmd, stdout=subprocess.PIPE).communicate()[0]
   root = json.loads(result.decode("utf-8"))
   return spec, root
@@ -265,7 +263,7 @@ def run(options, spec, root):
   """
   assert 'type' in spec
   checkout_type = spec['type']
-  checkout_spec = spec['%s_spec' % checkout_type]
+  checkout_spec = spec[f'{checkout_type}_spec']
 
   # Use sso:// by default if the env is cog
   if not options.protocol_override and \

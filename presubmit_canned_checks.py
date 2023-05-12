@@ -69,8 +69,7 @@ _CORP_LINK_KEYWORD = '.corp.google'
 
 def CheckChangeHasBugField(input_api, output_api):
   """Requires that the changelist have a Bug: field."""
-  bugs = input_api.change.BugsFromDescription()
-  if bugs:
+  if bugs := input_api.change.BugsFromDescription():
     if any(b.startswith('b/') for b in bugs):
       return [
           output_api.PresubmitNotifyResult(
@@ -104,8 +103,10 @@ def CheckDoNotSubmitInDescription(input_api, output_api):
   # Keyword is concatenated to avoid presubmit check rejecting the CL.
   keyword = 'DO NOT ' + 'SUBMIT'
   if keyword in input_api.change.DescriptionText():
-    return [output_api.PresubmitError(
-        keyword + ' is present in the changelist description.')]
+    return [
+        output_api.PresubmitError(
+            f'{keyword} is present in the changelist description.')
+    ]
 
   return []
 
@@ -186,8 +187,7 @@ def CheckAuthorizedAuthor(input_api, output_api, bot_allowlist=None):
   valid_authors = []
   with _io.open(authors_path, encoding='utf-8') as fp:
     for line in fp:
-      m = author_re.match(line)
-      if m:
+      if m := author_re.match(line):
         valid_authors.append(m.group(1).lower())
 
   if not any(input_api.fnmatch.fnmatch(author.lower(), valid)
@@ -221,10 +221,8 @@ def CheckDoNotSubmitInFiles(input_api, output_api):
       return True
 
   errors = _FindNewViolationsOfRule(DoNotSubmitRule, input_api, file_filter)
-  text = '\n'.join('Found %s in %s' % (keyword, loc) for loc in errors)
-  if text:
-    return [output_api.PresubmitError(text)]
-  return []
+  text = '\n'.join(f'Found {keyword} in {loc}' for loc in errors)
+  return [output_api.PresubmitError(text)] if text else []
 
 
 def CheckCorpLinksInFiles(input_api, output_api, source_file_filter=None):
@@ -232,8 +230,7 @@ def CheckCorpLinksInFiles(input_api, output_api, source_file_filter=None):
   errors = _FindNewViolationsOfRule(
       lambda _, line: _CORP_LINK_KEYWORD not in line, input_api,
       source_file_filter)
-  text = '\n'.join('Found corp link in %s' % loc for loc in errors)
-  if text:
+  if text := '\n'.join(f'Found corp link in {loc}' for loc in errors):
     return [output_api.PresubmitPromptWarning(text)]
   return []
 
@@ -264,7 +261,7 @@ def CheckChangeLintsClean(input_api, output_api, source_file_filter=None,
   if input_api.platform == 'win32':
     cpplint._SetOutputFormat('vs7')
 
-  if source_file_filter == None:
+  if source_file_filter is None:
     # The only valid extensions for cpplint are .cc, .h, .cpp, .cu, and .ch.
     # Only process those extensions which are used in Chromium.
     INCLUDE_CPP_FILES_ONLY = (r'.*\.(cc|h|cpp)$', )
@@ -279,11 +276,7 @@ def CheckChangeLintsClean(input_api, output_api, source_file_filter=None,
   files = [f.AbsoluteLocalPath() for f in
            input_api.AffectedSourceFiles(source_file_filter)]
   for file_name in files:
-    if _RE_IS_TEST.match(file_name):
-      level = 5
-    else:
-      level = 4
-
+    level = 5 if _RE_IS_TEST.match(file_name) else 4
     verbose_level = verbose_level or level
     cpplint.ProcessFile(file_name, verbose_level)
 
@@ -305,11 +298,10 @@ def CheckChangeLintsClean(input_api, output_api, source_file_filter=None,
 
 def CheckChangeHasNoCR(input_api, output_api, source_file_filter=None):
   """Checks no '\r' (CR) character is in any source files."""
-  cr_files = []
-  for f in input_api.AffectedSourceFiles(source_file_filter):
-    if '\r' in input_api.ReadFile(f, 'rb'):
-      cr_files.append(f.LocalPath())
-  if cr_files:
+  if cr_files := [
+      f.LocalPath() for f in input_api.AffectedSourceFiles(source_file_filter)
+      if '\r' in input_api.ReadFile(f, 'rb')
+  ]:
     return [output_api.PresubmitPromptWarning(
         'Found a CR character in these files:', items=cr_files)]
   return []
@@ -369,10 +361,9 @@ def CheckGenderNeutral(input_api, output_api, source_file_filter=None):
   errors = []
   for f in input_api.AffectedFiles(include_deletes=False,
                                    file_filter=source_file_filter):
-    for line_num, line in f.ChangedContents():
-      if gendered_re.search(line):
-        errors.append('%s (%d): %s' % (f.LocalPath(), line_num, line))
-
+    errors.extend('%s (%d): %s' % (f.LocalPath(), line_num, line)
+                  for line_num, line in f.ChangedContents()
+                  if gendered_re.search(line))
   if errors:
     return [output_api.PresubmitPromptWarning('Found a gendered pronoun in:',
                                               long_text='\n'.join(errors))]
@@ -382,7 +373,7 @@ def CheckGenderNeutral(input_api, output_api, source_file_filter=None):
 
 def _ReportErrorFileAndLine(filename, line_num, dummy_line):
   """Default error formatter for _FindNewViolationsOfRule."""
-  return '%s:%s' % (filename, line_num)
+  return f'{filename}:{line_num}'
 
 
 def _GenerateAffectedFileExtList(input_api, source_file_filter):
@@ -432,10 +423,10 @@ def _FindNewViolationsOfRuleForList(callable_rule,
     if all(callable_rule(extension, line) for line in f.NewContents()):
       continue  # No violation found in full text: can skip considering diff.
 
-    for line_num, line in f.ChangedContents():
-      if not callable_rule(extension, line):
-        errors.append(error_formatter(f.LocalPath(), line_num, line))
-
+    errors.extend(
+        error_formatter(f.LocalPath(), line_num, line)
+        for line_num, line in f.ChangedContents()
+        if not callable_rule(extension, line))
   return errors
 
 
@@ -473,9 +464,9 @@ def CheckChangeHasNoTabs(input_api, output_api, source_file_filter=None):
     source_file_filter = input_api.FilterSourceFile
   def filter_more(affected_file):
     basename = input_api.os_path.basename(affected_file.LocalPath())
-    return (not (basename in ('Makefile', 'makefile') or
-                 basename.endswith('.mk')) and
-            source_file_filter(affected_file))
+    return (basename not in ('Makefile', 'makefile')
+            and not basename.endswith('.mk')
+            and source_file_filter(affected_file))
 
   tabs = _FindNewViolationsOfRule(lambda _, line : '\t' not in line,
                                   input_api, filter_more)
@@ -492,8 +483,7 @@ def CheckChangeTodoHasOwner(input_api, output_api, source_file_filter=None):
   unowned_todo = input_api.re.compile('TO''DO[^(]')
   errors = _FindNewViolationsOfRule(lambda _, x : not unowned_todo.search(x),
                                     input_api, source_file_filter)
-  errors = ['Found TO''DO with no owner in ' + x for x in errors]
-  if errors:
+  if errors := [f'Found TODO with no owner in {x}' for x in errors]:
     return [output_api.PresubmitPromptWarning('\n'.join(errors))]
   return []
 
@@ -501,9 +491,8 @@ def CheckChangeTodoHasOwner(input_api, output_api, source_file_filter=None):
 def CheckChangeHasNoStrayWhitespace(input_api, output_api,
                                     source_file_filter=None):
   """Checks that there is no stray whitespace at source lines end."""
-  errors = _FindNewViolationsOfRule(lambda _, line : line.rstrip() == line,
-                                    input_api, source_file_filter)
-  if errors:
+  if errors := _FindNewViolationsOfRule(lambda _, line: line.rstrip() == line,
+                                        input_api, source_file_filter):
     return [output_api.PresubmitPromptWarning(
         'Found line ending with white spaces in:',
         long_text='\n'.join(errors))]
@@ -592,7 +581,7 @@ def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
     """True iff the pylint directive starting at line[pos] is global."""
     # Any character before |pos| that is not whitespace or '#' indidcates
     # this is a local directive.
-    return not any(c not in " \t#" for c in line[:pos])
+    return all(c in " \t#" for c in line[:pos])
 
   def check_python_long_lines(affected_files, error_formatter):
     errors = []
@@ -627,7 +616,7 @@ def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
     return errors
 
   def format_error(filename, line_num, line):
-    return '%s, line %s, %s chars' % (filename, line_num, len(line))
+    return f'{filename}, line {line_num}, {len(line)} chars'
 
   file_ext_list = list(
       _GenerateAffectedFileExtList(input_api, source_file_filter))
@@ -1017,9 +1006,9 @@ def GetPythonUnitTests(input_api, output_api, unit_tests, python3=False):
       env['PYTHONPATH'] = input_api.os_path.pathsep.join((backpath))
       env.pop('VPYTHON_CLEAR_PYTHONPATH', None)
     if python3:
-      cmd = [input_api.python3_executable, '-m', '%s' % unit_test]
+      cmd = [input_api.python3_executable, '-m', f'{unit_test}']
     else:
-      cmd = [input_api.python_executable, '-m', '%s' % unit_test]
+      cmd = [input_api.python_executable, '-m', f'{unit_test}']
     results.append(input_api.Command(
         name=unit_test_name,
         cmd=cmd,
@@ -1106,8 +1095,11 @@ def GetPylint(input_api,
   files_to_skip = tuple(files_to_skip or input_api.DEFAULT_FILES_TO_SKIP)
   extra_paths_list = extra_paths_list or []
 
-  assert version in ('1.5', '2.6', '2.7'), \
-      'Unsupported pylint version: %s' % version
+  assert version in (
+      '1.5',
+      '2.6',
+      '2.7',
+  ), f'Unsupported pylint version: {version}'
   python2 = (version == '1.5')
 
   if input_api.is_committing or input_api.no_diffs:
@@ -1130,6 +1122,7 @@ def GetPylint(input_api,
     prefix = input_api.os_path.join(input_api.os_path.relpath(
         input_api.PresubmitLocalPath(), input_api.change.RepositoryRoot()), '')
     return input_api.re.escape(prefix) + regex
+
   src_filter = lambda x: input_api.FilterSourceFile(
       x, map(rel_path, files_to_check), map(rel_path, files_to_skip))
   if not input_api.AffectedSourceFiles(src_filter):
@@ -1140,7 +1133,7 @@ def GetPylint(input_api,
     pylintrc = input_api.os_path.join(input_api.PresubmitLocalPath(), pylintrc)
   else:
     pylintrc = input_api.os_path.join(_HERE, 'pylintrc')
-  extra_args = ['--rcfile=%s' % pylintrc]
+  extra_args = [f'--rcfile={pylintrc}']
   if disabled_warnings:
     extra_args.extend(['-d', ','.join(disabled_warnings)])
 
@@ -1161,7 +1154,7 @@ def GetPylint(input_api,
     # Windows needs help running python files so we explicitly specify
     # the interpreter to use. It also has limitations on the size of
     # the command-line, so we pass arguments via a pipe.
-    tool = input_api.os_path.join(_HERE, 'pylint-' + version)
+    tool = input_api.os_path.join(_HERE, f'pylint-{version}')
     kwargs = {'env': env}
     if input_api.platform == 'win32':
       # On Windows, scripts on the current directory take precedence over PATH.
@@ -1175,22 +1168,18 @@ def GetPylint(input_api,
       tool += '.bat'
 
     cmd = [tool, '--args-on-stdin']
-    if len(flist) == 1:
-      description = flist[0]
-    else:
-      description = '%s files' % len(flist)
-
+    description = flist[0] if len(flist) == 1 else f'{len(flist)} files'
     args = extra_args[:]
     if extra:
       args.extend(extra)
-      description += ' using %s' % (extra,)
+      description += f' using {extra}'
     if parallel:
       # Make sure we don't request more parallelism than is justified for the
       # number of files we have to process. PyLint child-process startup time is
       # significant.
       jobs = min(input_api.cpu_count, 1 + len(flist) // files_per_job)
       if jobs > 1:
-        args.append('--jobs=%s' % jobs)
+        args.append(f'--jobs={jobs}')
         description += ' on %d processes' % jobs
 
     kwargs['stdin'] = '\n'.join(args + flist)
@@ -1198,11 +1187,12 @@ def GetPylint(input_api,
       kwargs['stdin'] = kwargs['stdin'].encode('utf-8')
 
     return input_api.Command(
-        name='Pylint (%s)' % description,
+        name=f'Pylint ({description})',
         cmd=cmd,
         kwargs=kwargs,
         message=error_type,
-        python3=not python2)
+        python3=not python2,
+    )
 
   # pylint's cycle detection doesn't work in parallel, so spawn a second,
   # single-threaded job for just that check. However, only do this if there are
@@ -1391,9 +1381,11 @@ def GetCodereviewOwnerAndReviewers(
                   _ReviewersFromChange(input_api.change))
 
   owner_email = input_api.gerrit.GetChangeOwner(issue)
-  reviewers = set(
-      r for r in input_api.gerrit.GetChangeReviewers(issue, approval_needed)
-      if _match_reviewer_email(r, owner_email, EMAIL_REGEXP))
+  reviewers = {
+      r
+      for r in input_api.gerrit.GetChangeReviewers(issue, approval_needed)
+      if _match_reviewer_email(r, owner_email, EMAIL_REGEXP)
+  }
   input_api.logging.debug('owner: %s; approvals given by: %s',
                           owner_email, ', '.join(sorted(reviewers)))
   return owner_email, reviewers
@@ -1406,7 +1398,7 @@ def _ReviewersFromChange(change):
   reviewers.update(change.TBRsFromDescription())
 
   # Drop reviewers that aren't specified in email address format.
-  return set(reviewer for reviewer in reviewers if '@' in reviewer)
+  return {reviewer for reviewer in reviewers if '@' in reviewer}
 
 
 def _match_reviewer_email(r, owner_email, email_regexp):
@@ -1476,7 +1468,7 @@ def PanProjectChecks(input_api, output_api,
 
   snapshot("checking owners files format")
   try:
-    if not 'PRESUBMIT_SKIP_NETWORK' in _os.environ:
+    if 'PRESUBMIT_SKIP_NETWORK' not in _os.environ:
       results.extend(
           input_api.canned_checks.CheckOwnersFormat(input_api, output_api))
 
@@ -1487,7 +1479,7 @@ def PanProjectChecks(input_api, output_api,
                                                 output_api,
                                                 source_file_filter=None))
   except Exception as e:
-    print('Failed to check owners - %s' % str(e))
+    print(f'Failed to check owners - {str(e)}')
 
   snapshot("checking long lines")
   results.extend(input_api.canned_checks.CheckLongLines(
@@ -1669,11 +1661,8 @@ def CheckCIPDPackages(input_api, output_api, platforms, packages):
     platforms (list): List of CIPD platforms to verify.
     packages (dict): Mapping of package name to version.
   """
-  manifest = []
-  for p in platforms:
-    manifest.append('$VerifiedPlatform %s' % (p,))
-  for k, v in packages.items():
-    manifest.append('%s %s' % (k, v))
+  manifest = [f'$VerifiedPlatform {p}' for p in platforms]
+  manifest.extend(f'{k} {v}' for k, v in packages.items())
   return CheckCIPDManifest(input_api, output_api, content='\n'.join(manifest))
 
 
@@ -1740,7 +1729,7 @@ def CheckForCommitObjects(input_api, output_api):
   tree_entries = map(parse_tree_entry, tree_entries)
   bad_tree_entries = [x for x in tree_entries if x[1] == 'commit']
   bad_tree_entries = [x[3] for x in bad_tree_entries]
-  if len(bad_tree_entries) > 0:
+  if bad_tree_entries:
     return [output_api.PresubmitError(
       'Commit objects present within tree.\n'
       'This may be due to submodule-related interactions; the presence of a\n'
@@ -1771,15 +1760,20 @@ def CheckVPythonSpec(input_api, output_api, file_filter=None):
   affected_files = input_api.AffectedTestableFiles(file_filter=file_filter)
   affected_files = map(lambda f: f.AbsoluteLocalPath(), affected_files)
 
-  commands = []
-  for f in affected_files:
-    commands.append(
-        input_api.Command('Verify %s' % f, [
-            input_api.python3_executable, '-vpython-spec', f, '-vpython-tool',
-            'verify'
-        ], {'stderr': input_api.subprocess.STDOUT}, output_api.PresubmitError))
-
-  return commands
+  return [
+      input_api.Command(
+          f'Verify {f}',
+          [
+              input_api.python3_executable,
+              '-vpython-spec',
+              f,
+              '-vpython-tool',
+              'verify',
+          ],
+          {'stderr': input_api.subprocess.STDOUT},
+          output_api.PresubmitError,
+      ) for f in affected_files
+  ]
 
 
 def CheckChangedLUCIConfigs(input_api, output_api):
@@ -1798,9 +1792,9 @@ def CheckChangedLUCIConfigs(input_api, output_api):
     remote_branch = input_api.gerrit.GetDestRef(input_api.change.issue)
   else:
     remote, remote_branch = cl.GetRemoteBranch()
-    if remote_branch.startswith('refs/remotes/%s/' % remote):
-      remote_branch = remote_branch.replace(
-          'refs/remotes/%s/' % remote, 'refs/heads/', 1)
+    if remote_branch.startswith(f'refs/remotes/{remote}/'):
+      remote_branch = remote_branch.replace(f'refs/remotes/{remote}/',
+                                            'refs/heads/', 1)
     if remote_branch.startswith('refs/remotes/branch-heads/'):
       remote_branch = remote_branch.replace(
           'refs/remotes/branch-heads/', 'refs/branch-heads/', 1)
@@ -1821,10 +1815,9 @@ def CheckChangedLUCIConfigs(input_api, output_api):
         'Error in authenticating user.', long_text=str(e))]
 
   def request(endpoint, body=None):
-    api_url = ('https://%s/_ah/api/config/v1/%s'
-               % (LUCI_CONFIG_HOST_NAME, endpoint))
+    api_url = f'https://{LUCI_CONFIG_HOST_NAME}/_ah/api/config/v1/{endpoint}'
     req = input_api.urllib_request.Request(api_url)
-    req.add_header('Authorization', 'Bearer %s' % acc_tkn.token)
+    req.add_header('Authorization', f'Bearer {acc_tkn.token}')
     if body is not None:
       req.add_header('Content-Type', 'application/json')
       req.data = json.dumps(body).encode('utf-8')
@@ -1837,21 +1830,20 @@ def CheckChangedLUCIConfigs(input_api, output_api):
         'Config set request to luci-config failed', long_text=str(e))]
   if not config_sets:
     return [output_api.PresubmitPromptWarning('No config_sets were returned')]
-  loc_pref = '%s/+/%s/' % (remote_host_url, remote_branch)
+  loc_pref = f'{remote_host_url}/+/{remote_branch}/'
   logging.debug('Derived location prefix: %s', loc_pref)
   dir_to_config_set = {
-    '%s/' % cs['location'][len(loc_pref):].rstrip('/'): cs['config_set']
-    for cs in config_sets
-    if cs['location'].startswith(loc_pref) or
-    ('%s/' % cs['location']) == loc_pref
+      f"{cs['location'][len(loc_pref):].rstrip('/')}/": cs['config_set']
+      for cs in config_sets if cs['location'].startswith(loc_pref)
+      or f"{cs['location']}/" == loc_pref
   }
   if not dir_to_config_set:
     warning_long_text_lines = [
-        'No config_set found for %s.' % loc_pref,
+        f'No config_set found for {loc_pref}.',
         'Found the following:',
     ]
     for loc in sorted(cs['location'] for cs in config_sets):
-      warning_long_text_lines.append('  %s' % loc)
+      warning_long_text_lines.append(f'  {loc}')
     warning_long_text_lines.append('')
     warning_long_text_lines.append(
         'If the requested location is internal,'
@@ -1914,18 +1906,21 @@ def CheckLucicfgGenOutput(input_api, output_api, entry_script):
   """
   return [
       input_api.Command(
-        'lucicfg validate "%s"' % entry_script,
-        [
-            'lucicfg' if not input_api.is_windows else 'lucicfg.bat',
-            'validate', entry_script,
-            '-log-level', 'debug' if input_api.verbose else 'warning',
-        ],
-        {
-          'stderr': input_api.subprocess.STDOUT,
-          'shell': input_api.is_windows,  # to resolve *.bat
-          'cwd': input_api.PresubmitLocalPath(),
-        },
-        output_api.PresubmitError)
+          f'lucicfg validate "{entry_script}"',
+          [
+              'lucicfg' if not input_api.is_windows else 'lucicfg.bat',
+              'validate',
+              entry_script,
+              '-log-level',
+              'debug' if input_api.verbose else 'warning',
+          ],
+          {
+              'stderr': input_api.subprocess.STDOUT,
+              'shell': input_api.is_windows,  # to resolve *.bat
+              'cwd': input_api.PresubmitLocalPath(),
+          },
+          output_api.PresubmitError,
+      )
   ]
 
 def CheckJsonParses(input_api, output_api, file_filter=None):
@@ -1944,8 +1939,9 @@ def CheckJsonParses(input_api, output_api, file_filter=None):
         json.load(j)
       except ValueError:
         # Just a warning for now, in case people are using JSON5 somewhere.
-        warnings.append(output_api.PresubmitPromptWarning(
-            '%s does not appear to be valid JSON.' % f.LocalPath()))
+        warnings.append(
+            output_api.PresubmitPromptWarning(
+                f'{f.LocalPath()} does not appear to be valid JSON.'))
   return warnings
 
 # string pattern, sequence of strings to show when pattern matches,
@@ -1997,7 +1993,7 @@ def _GetMessageForMatchingTerm(input_api, affected_file, line_number, line,
     line = input_api.re.sub(r"#.*$", "", line)
 
   matched = False
-  if term[0:1] == '/':
+  if term[:1] == '/':
     regex = term[1:]
     if input_api.re.search(regex, line):
       matched = True
@@ -2006,9 +2002,7 @@ def _GetMessageForMatchingTerm(input_api, affected_file, line_number, line,
 
   if matched:
     result.append('    %s:%d:' % (affected_file.LocalPath(), line_number))
-    for message_line in message:
-      result.append('      %s' % message_line)
-
+    result.extend(f'      {message_line}' for message_line in message)
   return result
 
 
@@ -2086,16 +2080,14 @@ def CheckInclusiveLanguage(input_api, output_api,
 def CheckUpdateOwnersFileReferences(input_api, output_api):
   """Checks whether an OWNERS file is being (re)moved and if so asks the
     contributor to update any file:// references to it."""
-  files = []
-  # AffectedFiles() includes owner files, not AffectedSourceFiles().
-  for f in input_api.AffectedFiles():
-    # Moved files appear here as one deletion and one addition.
-    if f.LocalPath().endswith('OWNERS') and f.Action() == 'D':
-      files.append(f.LocalPath())
-  if not files:
+  if files := [
+      f.LocalPath() for f in input_api.AffectedFiles()
+      if f.LocalPath().endswith('OWNERS') and f.Action() == 'D'
+  ]:
+    return [
+        output_api.PresubmitPromptWarning(
+            'OWNERS files being moved/removed, please update any file:// ' +
+            'references to them in other OWNERS files', files)
+    ]
+  else:
     return []
-  return [
-      output_api.PresubmitPromptWarning(
-          'OWNERS files being moved/removed, please update any file:// ' +
-          'references to them in other OWNERS files', files)
-  ]

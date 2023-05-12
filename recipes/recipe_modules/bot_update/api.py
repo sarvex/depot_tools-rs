@@ -35,11 +35,7 @@ class BotUpdateApi(recipe_api.RecipeApi):
     if self.m.buildbucket.build.id == 0:
       env['DEPOT_TOOLS_COLLECT_METRICS'] = '0'
     else:
-      env['DEPOT_TOOLS_REPORT_BUILD'] = '%s/%s/%s/%s' % (
-          self.m.buildbucket.build.builder.project,
-          self.m.buildbucket.build.builder.bucket,
-          self.m.buildbucket.build.builder.builder,
-          self.m.buildbucket.build.id)
+      env['DEPOT_TOOLS_REPORT_BUILD'] = f'{self.m.buildbucket.build.builder.project}/{self.m.buildbucket.build.builder.bucket}/{self.m.buildbucket.build.builder.builder}/{self.m.buildbucket.build.id}'
     with self.m.context(env=env):
       with self.m.depot_tools.on_path():
         return self.m.step(name,
@@ -61,22 +57,18 @@ class BotUpdateApi(recipe_api.RecipeApi):
     assert gclient_config.solutions, 'gclient_config.solutions is empty'
 
     # if repo is not specified, choose the first solution.
-    if not (commit.host and commit.project):
+    if not commit.host or not commit.project:
       return gclient_config.solutions[0].name
     assert commit.host and commit.project
 
     repo_url = self.m.gitiles.unparse_repo_url(commit.host, commit.project)
-    repo_path = self.m.gclient.get_repo_path(
-        repo_url, gclient_config=gclient_config)
-    if not repo_path:
+    if repo_path := self.m.gclient.get_repo_path(repo_url,
+                                                 gclient_config=gclient_config):
+      return repo_path
+    else:
       raise self.m.step.InfraFailure(
-          'invalid (host, project) pair in '
-          'buildbucket.build.input.gitiles_commit: '
-          '(%s, %s) does not match any of configured gclient solutions '
-          'and not present in gclient_config.repo_path_map' % (
-              commit.host, commit.project))
-
-    return repo_path
+          f'invalid (host, project) pair in buildbucket.build.input.gitiles_commit: ({commit.host}, {commit.project}) does not match any of configured gclient solutions and not present in gclient_config.repo_path_map'
+      )
 
   def ensure_checkout(self,
                       gclient_config=None,

@@ -115,8 +115,8 @@ def parse(repo_root, recipes_cfg_path):
 IS_WIN = sys.platform.startswith(('win', 'cygwin'))
 
 _BAT = '.bat' if IS_WIN else ''
-GIT = 'git' + _BAT
-CIPD = 'cipd' + _BAT
+GIT = f'git{_BAT}'
+CIPD = f'cipd{_BAT}'
 REQUIRED_BINARIES = {GIT, CIPD}
 
 
@@ -162,10 +162,12 @@ def parse_args(argv):
   p.add_argument('-O', '--project-override', action='append')
   p.add_argument('--package', type=os.path.abspath)
   args, _ = p.parse_known_args(argv)
-  for override in args.project_override or ():
-    if override.startswith(PREFIX):
-      return override[len(PREFIX):], args.package
-  return None, args.package
+  return next(
+      ((override[len(PREFIX):], args.package)
+       for override in args.project_override or ()
+       if override.startswith(PREFIX)),
+      (None, args.package),
+  )
 
 
 def checkout_engine(engine_path, repo_root, recipes_cfg_path):
@@ -227,7 +229,7 @@ def checkout_engine(engine_path, repo_root, recipes_cfg_path):
 def main():
   for required_binary in REQUIRED_BINARIES:
     if not _is_on_path(required_binary):
-      return 'Required binary is not found on PATH: %s' % required_binary
+      return f'Required binary is not found on PATH: {required_binary}'
 
   if '--verbose' in sys.argv:
     logging.getLogger().setLevel(logging.INFO)
@@ -252,7 +254,7 @@ def main():
   using_py3 = py3_only or os.getenv('RECIPES_USE_PY3') == 'true'
   vpython = ('vpython' + ('3' if using_py3 else '') + _BAT)
   if not _is_on_path(vpython):
-    return 'Required binary is not found on PATH: %s' % vpython
+    return f'Required binary is not found on PATH: {vpython}'
 
   argv = ([
     vpython, '-u', os.path.join(engine_path, 'recipe_engine', 'main.py'),

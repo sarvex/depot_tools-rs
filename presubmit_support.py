@@ -119,10 +119,8 @@ class SigintHandler(object):
   def __on_sigint(self):
     self.__got_sigint = True
     while self.__processes:
-      try:
+      with contextlib.suppress(OSError):
         self.__processes.pop().terminate()
-      except OSError:
-        pass
 
   def interrupt(self, signal_num, frame):
     with self.__lock:
@@ -324,9 +322,10 @@ def _ShouldRunPresubmit(script_text, use_python3):
     Return:
       A boolean if presubmit should be executed
   """
-  m = re.search('^USE_PYTHON3 = (True|False)$', script_text, flags=re.MULTILINE)
-  if m:
-    use_python3 = m.group(1) == 'True'
+  if m := re.search('^USE_PYTHON3 = (True|False)$',
+                    script_text,
+                    flags=re.MULTILINE):
+    use_python3 = m[1] == 'True'
 
   return ((sys.version_info.major == 2) and not use_python3) or \
       ((sys.version_info.major == 3) and use_python3)
@@ -368,7 +367,7 @@ class _PresubmitResult(object):
 
     if six.PY3 and isinstance(val, bytes):
       return val.decode()
-    raise ValueError("Unknown string type %s" % type(val))
+    raise ValueError(f"Unknown string type {type(val)}")
 
   def handle(self):
     sys.stdout.write(self._message)
@@ -485,7 +484,7 @@ class GerritAccessor(object):
     if not ref.startswith('refs/'):
       # NOTE: it is possible to create 'refs/x' branch,
       # aka 'refs/heads/refs/x'. However, this is ill-advised.
-      ref = 'refs/heads/%s' % ref
+      ref = f'refs/heads/{ref}'
     return ref
 
   def _GetApproversForLabel(self, issue, label):
@@ -683,14 +682,14 @@ class InputApi(object):
     self._named_temporary_files = []
 
     self.owners_client = None
-    if self.gerrit and not 'PRESUBMIT_SKIP_NETWORK' in self.environ:
+    if self.gerrit and 'PRESUBMIT_SKIP_NETWORK' not in self.environ:
       try:
         self.owners_client = owners_client.GetCodeOwnersClient(
             host=self.gerrit.host,
             project=self.gerrit.project,
             branch=self.gerrit.branch)
       except Exception as e:
-        print('Failed to set owners_client - %s' % str(e))
+        print(f'Failed to set owners_client - {str(e)}')
     self.owners_finder = owners_finder.OwnersFinder
     self.verbose = verbose
     self.Command = CommandData
@@ -927,7 +926,7 @@ class _GitDiffCache(_DiffCache):
   def GetDiff(self, path, local_root):
     # Compare against None to distinguish between None and an initialized but
     # empty dictionary.
-    if self._diffs_by_file == None:
+    if self._diffs_by_file is None:
       # Compute a single diff for all files and parse the output; should
       # with git this is much faster than computing one diff for each file.
       diffs = {}
@@ -943,26 +942,20 @@ class _GitDiffCache(_DiffCache):
       current_diff = []
       keep_line_endings = True
       for x in unified_diff.splitlines(keep_line_endings):
-        match = file_marker.match(x)
-        if match:
+        if match := file_marker.match(x):
           # Marks the start of a new per-file section.
-          diffs[match.group('filename')] = current_diff = [x]
+          diffs[match['filename']] = current_diff = [x]
         elif x.startswith('diff --git'):
-          raise PresubmitFailure('Unexpected diff line: %s' % x)
+          raise PresubmitFailure(f'Unexpected diff line: {x}')
         else:
           current_diff.append(x)
 
-      self._diffs_by_file = dict(
-        (normpath(path), ''.join(diff)) for path, diff in diffs.items())
+      self._diffs_by_file = {
+          normpath(path): ''.join(diff)
+          for path, diff in diffs.items()
+      }
 
-    if path not in self._diffs_by_file:
-      # SCM didn't have any diff on this file. It could be that the file was not
-      # modified at all (e.g. user used --all flag in git cl presubmit).
-      # Intead of failing, return empty string.
-      # See: https://crbug.com/808346.
-      return ''
-
-    return self._diffs_by_file[path]
+    return '' if path not in self._diffs_by_file else self._diffs_by_file[path]
 
   def GetOldContents(self, path, local_root):
     return scm.GIT.GetOldContents(local_root, path, branch=self._upstream)
@@ -1044,7 +1037,7 @@ class AffectedFile(object):
       except UnicodeDecodeError as e:
         # log the filename since we're probably trying to read a binary
         # file, and shouldn't be.
-        print('Error reading %s: %s' % (self.AbsoluteLocalPath(), e))
+        print(f'Error reading {self.AbsoluteLocalPath()}: {e}')
         raise
 
     return self._cached_new_contents[:]
@@ -1066,8 +1059,7 @@ class AffectedFile(object):
     # The keeplinebreaks parameter to splitlines must be True or else the
     # CheckForWindowsLineEndings presubmit will be a NOP.
     for line in self.GenerateScmDiff().splitlines(keeplinebreaks):
-      m = re.match(r'^@@ [0-9\,\+\-]+ \+([0-9]+)\,[0-9]+ @@', line)
-      if m:
+      if m := re.match(r'^@@ [0-9\,\+\-]+ \+([0-9]+)\,[0-9]+ @@', line):
         line_num = int(m.groups(1)[0])
         continue
       if line.startswith('+') and not line.startswith('++'):
@@ -1186,8 +1178,7 @@ class Change(object):
     description_without_tags = []
     self.tags = {}
     for line in self._full_description.splitlines():
-      m = self.TAG_LINE_RE.match(line)
-      if m:
+      if m := self.TAG_LINE_RE.match(line):
         self.tags[m.group('key')] = m.group('value')
       else:
         description_without_tags.append(line)
@@ -1236,8 +1227,7 @@ class Change(object):
 
     tags = []
     for tag in bug_tags:
-      values = self.tags.get(tag)
-      if values:
+      if values := self.tags.get(tag):
         tags += [value.strip() for value in values.split(',')]
 
     footers = []
@@ -1393,15 +1383,12 @@ def ListRelevantPresubmitFiles(files, root):
   # Look for PRESUBMIT.py in all candidate directories.
   results = []
   for directory in sorted(list(candidates)):
-    try:
+    with contextlib.suppress(OSError):
       for f in os.listdir(directory):
         p = os.path.join(directory, f)
         if os.path.isfile(p) and re.match(
             r'PRESUBMIT.*\.py$', f) and not f.startswith('PRESUBMIT_test'):
           results.append(p)
-    except OSError:
-      pass
-
   logging.debug('Presubmit files: %s', ','.join(results))
   return results
 
@@ -1442,7 +1429,7 @@ class GetPostUploadExecuter(object):
     if function_name not in context:
       return {}
     post_upload_hook = context[function_name]
-    if not len(inspect.getargspec(post_upload_hook)[0]) == 3:
+    if len(inspect.getargspec(post_upload_hook)[0]) != 3:
       raise PresubmitFailure(
           'Expected function "PostUploadHook" to take three arguments.')
     return post_upload_hook(gerrit_obj, change, OutputApi(False))
@@ -1469,7 +1456,7 @@ def DoPostUploadExecuter(change, gerrit_obj, verbose, use_python3=False):
     use_python3: if true, default to using Python3 for presubmit checks
                  rather than Python2.
   """
-  python_version = 'Python %s' % sys.version_info.major
+  python_version = f'Python {sys.version_info.major}'
   sys.stdout.write('Running %s post upload checks ...\n' % python_version)
   presubmit_files = ListRelevantPresubmitFiles(
       change.LocalPaths(), change.RepositoryRoot())
@@ -1586,7 +1573,7 @@ class PresubmitExecuter(object):
       project = self.gerrit.project or ''
 
     # Prefix for test names
-    prefix = 'presubmit:%s/%s:%s/' % (host, project, rel_path)
+    prefix = f'presubmit:{host}/{project}:{rel_path}/'
 
     # Perform all the desired presubmit checks.
     results = []
@@ -1651,14 +1638,14 @@ class PresubmitExecuter(object):
     """
     start_time = time_time()
     try:
-      result = eval(function_name + '(*__args)', context)
+      result = eval(f'{function_name}(*__args)', context)
       self._check_result_type(result)
     except Exception:
       _, e_value, _ = sys.exc_info()
       result = [
           OutputApi.PresubmitError(
-              'Evaluation of %s failed: %s, %s' %
-              (function_name, e_value, traceback.format_exc()))
+              f'Evaluation of {function_name} failed: {e_value}, {traceback.format_exc()}'
+          )
       ]
 
     elapsed_time = time_time() - start_time
@@ -1674,7 +1661,7 @@ class PresubmitExecuter(object):
         for r in result:
           fields = r.json_format()
           message = fields['message']
-          items = '\n'.join('  %s' % item for item in fields['items'])
+          items = '\n'.join(f'  {item}' for item in fields['items'])
           failure_reasons.append('\n'.join([message, items]))
         if failure_reasons:
           failure_reason = '\n'.join(failure_reasons)

@@ -63,8 +63,10 @@ def _CheckPythonVersion():
          sys.executable, sys.version.replace('\n', ' ')),
         file=sys.stderr)
   if sys.version_info < MIN_PYTHON_VER_HARD:
-    print('%s: fatal: giving up since Python is too old.' % (progname,),
-          file=sys.stderr)
+    print(
+        f'{progname}: fatal: giving up since Python is too old.',
+        file=sys.stderr,
+    )
     sys.exit(1)
 
   print('warning: temporarily continuing anyways; you must upgrade soon to '

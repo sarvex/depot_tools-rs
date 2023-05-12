@@ -18,11 +18,13 @@ def main():
     headers = {}
     if 'bot_metrics' in metrics:
       token = auth.Authenticator().get_access_token().token
-      headers = {'Authorization': 'Bearer ' + token}
-    urllib.request.urlopen(urllib.request.Request(
-        url=metrics_utils.APP_URL + '/upload',
-        data=metrics.encode('utf-8'),
-        headers=headers))
+      headers = {'Authorization': f'Bearer {token}'}
+    urllib.request.urlopen(
+        urllib.request.Request(
+            url=f'{metrics_utils.APP_URL}/upload',
+            data=metrics.encode('utf-8'),
+            headers=headers,
+        ))
   except (urllib.error.HTTPError, urllib.error.URLError,
           http.client.RemoteDisconnected):
     pass

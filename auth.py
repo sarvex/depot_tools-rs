@@ -125,11 +125,11 @@ class Authenticator(object):
 
     @functools.wraps(request_orig)
     def new_request(
-        uri, method='GET', body=None, headers=None,
-        redirections=httplib2.DEFAULT_MAX_REDIRECTS,
-        connection_type=None):
+          uri, method='GET', body=None, headers=None,
+          redirections=httplib2.DEFAULT_MAX_REDIRECTS,
+          connection_type=None):
       headers = (headers or {}).copy()
-      headers['Authorization'] = 'Bearer %s' % self.get_access_token().token
+      headers['Authorization'] = f'Bearer {self.get_access_token().token}'
       return request_orig(
           uri, method, body, headers, redirections, connection_type)
 

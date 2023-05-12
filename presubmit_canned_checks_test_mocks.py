@@ -43,10 +43,10 @@ class MockCannedChecks(object):
       if all(callable_rule(extension, line) for line in f.NewContents()):
         continue  # No violation found in full text: can skip considering diff.
 
-      for line_num, line in f.ChangedContents():
-        if not callable_rule(extension, line):
-          errors.append(error_formatter(f.LocalPath(), line_num, line))
-
+      errors.extend(
+          error_formatter(f.LocalPath(), line_num, line)
+          for line_num, line in f.ChangedContents()
+          if not callable_rule(extension, line))
     return errors
 
 
@@ -124,7 +124,7 @@ class MockInputApi(object):
       if file_.LocalPath() == filename:
         return '\n'.join(file_.NewContents())
     # Otherwise, file is not in our mock API.
-    raise IOError("No such file or directory: '%s'" % filename)
+    raise IOError(f"No such file or directory: '{filename}'")
 
 
 class MockOutputApi(object):

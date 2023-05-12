@@ -57,11 +57,7 @@ def show_dir(full_name, relative_name, color):
 def main():
   """Take no arguments."""
 
-  color = False
-
-  if os.isatty(1):
-    color = True
-
+  color = bool(os.isatty(1))
   base = os.path.basename(os.getcwd())
   root, entries = gclient_utils.GetGClientRootAndEntries()
 
@@ -72,7 +68,7 @@ def main():
   # We want to use the full path for testing, but we want to use the relative
   # path for display.
   fulldirs = [os.path.normpath(os.path.join(root, p)) for p in raw]
-  reldirs = [re.sub('^' + base, '.', p) for p in raw]
+  reldirs = [re.sub(f'^{base}', '.', p) for p in raw]
 
   for full_path, relative_path in zip(fulldirs, reldirs):
     show_dir(full_path, relative_path, color)

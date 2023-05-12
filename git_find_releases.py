@@ -30,9 +30,17 @@ def GetNameForCommit(sha1):
 
 
 def GetMergesForCommit(sha1):
-  return [c.split()[0] for c in
-          git.run('log', '--oneline', '-F', '--all', '--no-abbrev', '--grep',
-                  'cherry picked from commit %s' % sha1).splitlines()]
+  return [
+      c.split()[0] for c in git.run(
+          'log',
+          '--oneline',
+          '-F',
+          '--all',
+          '--no-abbrev',
+          '--grep',
+          f'cherry picked from commit {sha1}',
+      ).splitlines()
+  ]
 
 
 def main(args):
@@ -45,13 +53,13 @@ def main(args):
   for arg in args:
     commit_name = GetNameForCommit(arg)
     if not commit_name:
-      print('%s not found' % arg)
+      print(f'{arg} not found')
       return 1
-    print('commit %s was:' % arg)
-    print('  initially in ' + commit_name)
+    print(f'commit {arg} was:')
+    print(f'  initially in {commit_name}')
     merges = GetMergesForCommit(arg)
     for merge in merges:
-      print('  merged to ' + GetNameForCommit(merge) + ' (as ' + merge + ')')
+      print(f'  merged to {GetNameForCommit(merge)} (as {merge})')
     if not merges:
       print('No merges found. If this seems wrong, be sure that you did:')
       print('  git fetch origin && gclient sync --with_branch_heads')

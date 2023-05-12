@@ -61,7 +61,7 @@ def _print_help(outbuf):
   for line in __doc__.splitlines():
     for name, color in names.items():
       if name in line:
-        msg += line.replace('* ' + name, color + '* ' + name + RESET) + '\n'
+        msg += line.replace(f'* {name}', f'{color}* {name}{RESET}') + '\n'
         break
     else:
       msg += line + '\n'
@@ -69,7 +69,7 @@ def _print_help(outbuf):
 
 
 def _color_branch(branch, all_branches, all_tags, current):
-  if branch in (current, 'HEAD -> ' + current):
+  if branch in (current, f'HEAD -> {current}'):
     color = CYAN
     current = None
   elif branch in all_branches:
@@ -88,10 +88,10 @@ def _color_branch(branch, all_branches, all_tags, current):
 def _color_branch_list(branch_list, all_branches, all_tags, current):
   if not branch_list:
     return ''
-  colored_branches = (GREEN + ', ').join(
-      _color_branch(branch, all_branches, all_tags, current)
-      for branch in branch_list if branch != 'HEAD')
-  return (GREEN + '(' + colored_branches + GREEN + ') ' + RESET)
+  colored_branches = f'{GREEN}, '.join(
+      (_color_branch(branch, all_branches, all_tags, current)
+       for branch in branch_list if branch != 'HEAD'))
+  return f'{GREEN}({colored_branches}{GREEN}) {RESET}'
 
 
 def _parse_log_line(line):
@@ -125,8 +125,7 @@ def main(argv, outbuf):
 
   merge_base_map = {}
   for branch in all_branches:
-    merge_base = git_common.get_or_create_merge_base(branch)
-    if merge_base:
+    if merge_base := git_common.get_or_create_merge_base(branch):
       merge_base_map.setdefault(merge_base, set()).add(branch)
 
   for merge_base, branches in merge_base_map.items():
@@ -141,7 +140,7 @@ def main(argv, outbuf):
       graph, commit, branch_list, commit_date, subject = _parse_log_line(line)
 
       if 'HEAD' in branch_list:
-        graph = graph.replace('*', BLUE_BACK + '*')
+        graph = graph.replace('*', f'{BLUE_BACK}*')
 
       line = '{graph}{commit}\t{branches}{date} ~ {subject}'.format(
           graph=graph,
@@ -152,7 +151,7 @@ def main(argv, outbuf):
           subject=subject)
 
       if commit in merge_base_map:
-        line += '    <({})'.format(WHITE + merge_base_map[commit] + RESET)
+        line += f'    <({WHITE + merge_base_map[commit] + RESET})'
 
       line += os.linesep
       outbuf.write(line.encode('utf-8', 'replace'))

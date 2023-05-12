@@ -47,7 +47,7 @@ class CalledProcessError(subprocess.CalledProcessError):
     out = 'Command %r returned non-zero exit status %s' % (
         ' '.join(self.cmd), self.returncode)
     if self.cwd:
-      out += ' in ' + self.cwd
+      out += f' in {self.cwd}'
     if self.stdout:
       out += '\n' + self.stdout.decode('utf-8', 'ignore')
     if self.stderr:
@@ -128,9 +128,7 @@ class Popen(subprocess.Popen):
     if kwargs.get('env') is not None and sys.version_info.major != 2:
       # Subprocess expects environment variables to be strings in Python 3.
       def ensure_str(value):
-        if isinstance(value, bytes):
-          return value.decode()
-        return value
+        return value.decode() if isinstance(value, bytes) else value
 
       kwargs['env'] = {
           ensure_str(k): ensure_str(v)
@@ -141,7 +139,7 @@ class Popen(subprocess.Popen):
       # the executable, but shell=True makes subprocess on Linux fail when it's
       # called with a list because it only tries to execute the first item in
       # the list.
-      kwargs['shell'] = bool(sys.platform=='win32')
+      kwargs['shell'] = sys.platform == 'win32'
 
     if isinstance(args, basestring):
       tmp_str = args
@@ -150,7 +148,7 @@ class Popen(subprocess.Popen):
     else:
       raise CalledProcessError(None, args, kwargs.get('cwd'), None, None)
     if kwargs.get('cwd', None):
-      tmp_str += ';  cwd=%s' % kwargs['cwd']
+      tmp_str += f";  cwd={kwargs['cwd']}"
     logging.debug(tmp_str)
 
     try:

@@ -61,9 +61,7 @@ class InvalidPlatformError(Exception):
 def GetNormalizedPlatform():
   """Returns the result of sys.platform accounting for cygwin.
   Under cygwin, this will always return "win32" like the native Python."""
-  if sys.platform == 'cygwin':
-    return 'win32'
-  return sys.platform
+  return 'win32' if sys.platform == 'cygwin' else sys.platform
 
 # Common utilities
 class Gsutil(object):
@@ -82,7 +80,7 @@ class Gsutil(object):
 
   def __init__(self, path, boto_path=None):
     if not os.path.exists(path):
-      raise FileNotFoundError('GSUtil not found in %s' % path)
+      raise FileNotFoundError(f'GSUtil not found in {path}')
     self.path = path
     self.boto_path = boto_path
 
@@ -96,18 +94,16 @@ class Gsutil(object):
       env['BOTO_CONFIG'] = self.boto_path
 
     if PLATFORM_MAPPING[sys.platform] != 'win':
-      env.update((x, "/tmp") for x in _TEMPDIR_ENV_VARS)
+      env |= ((x, "/tmp") for x in _TEMPDIR_ENV_VARS)
 
     return env
 
   def call(self, *args):
-    cmd = [self.VPYTHON3, self.path]
-    cmd.extend(args)
+    cmd = [self.VPYTHON3, self.path, *args]
     return subprocess2.call(cmd, env=self.get_sub_env())
 
   def check_call(self, *args):
-    cmd = [self.VPYTHON3, self.path]
-    cmd.extend(args)
+    cmd = [self.VPYTHON3, self.path, *args]
     ((out, err), code) = subprocess2.communicate(
         cmd,
         stdout=subprocess2.PIPE,
@@ -117,16 +113,12 @@ class Gsutil(object):
     out = out.decode('utf-8', 'replace')
     err = err.decode('utf-8', 'replace')
 
-    # Parse output.
-    status_code_match = re.search('status=([0-9]+)', err)
-    if status_code_match:
-      return (int(status_code_match.group(1)), out, err)
+    if status_code_match := re.search('status=([0-9]+)', err):
+      return int(status_code_match[1]), out, err
     if ('You are attempting to access protected data with '
         'no configured credentials.' in err):
       return (403, out, err)
-    if 'matched no objects' in err:
-      return (404, out, err)
-    return (code, out, err)
+    return (404, out, err) if 'matched no objects' in err else (code, out, err)
 
   def check_call_with_retries(self, *args):
     delay = self.RETRY_BASE_DELAY
@@ -156,11 +148,10 @@ def get_sha1(filename):
   sha1 = hashlib.sha1()
   with open(filename, 'rb') as f:
     while True:
-      # Read in 1mb chunks, so it doesn't all have to be loaded into memory.
-      chunk = f.read(1024*1024)
-      if not chunk:
+      if chunk := f.read(1024 * 1024):
+        sha1.update(chunk)
+      else:
         break
-      sha1.update(chunk)
   return sha1.hexdigest()
 
 
@@ -172,17 +163,16 @@ def enumerate_input(input_filename, directory, recursive, ignore_errors, output,
     if not os.path.exists(input_filename):
       if not ignore_errors:
         raise FileNotFoundError(
-          '{} not found when attempting enumerate files to download.'.format(
-          input_filename))
-      print('%s not found.' % input_filename, file=sys.stderr)
+            f'{input_filename} not found when attempting enumerate files to download.'
+        )
+      print(f'{input_filename} not found.', file=sys.stderr)
     with open(input_filename, 'rb') as f:
-      sha1_match = re.match(b'^([A-Za-z0-9]{40})$', f.read(1024).rstrip())
-      if sha1_match:
+      if sha1_match := re.match(b'^([A-Za-z0-9]{40})$', f.read(1024).rstrip()):
         yield (sha1_match.groups(1)[0].decode('utf-8'), output)
         return
     if not ignore_errors:
-      raise InvalidFileError('No sha1 sum found in %s.' % input_filename)
-    print('No sha1 sum found in %s.' % input_filename, file=sys.stderr)
+      raise InvalidFileError(f'No sha1 sum found in {input_filename}.')
+    print(f'No sha1 sum found in {input_filename}.', file=sys.stderr)
     return
 
   if not directory:
@@ -221,10 +211,10 @@ def enumerate_input(input_filename, directory, recursive, ignore_errors, output,
               sha1_match.groups(1)[0].decode('utf-8'),
               full_path.replace('.sha1', '')
           )
+        elif ignore_errors:
+          print(f'No sha1 sum found in {filename}.', file=sys.stderr)
         else:
-          if not ignore_errors:
-            raise InvalidFileError('No sha1 sum found in %s.' % filename)
-          print('No sha1 sum found in %s.' % filename, file=sys.stderr)
+          raise InvalidFileError(f'No sha1 sum found in {filename}.')
 
 
 def _validate_tar_file(tar, prefix):
@@ -232,11 +222,9 @@ def _validate_tar_file(tar, prefix):
     """Returns false if the tarinfo is something we explicitly forbid."""
     if tarinfo.issym() or tarinfo.islnk():
       return False
-    if ('../' in tarinfo.name or
-        '..\\' in tarinfo.name or
-        not tarinfo.name.startswith(prefix)):
-      return False
-    return True
+    return bool('../' not in tarinfo.name and '..\\' not in tarinfo.name
+                and tarinfo.name.startswith(prefix))
+
   return all(map(_validate, tar.getmembers()))
 
 def _downloader_worker_thread(thread_num, q, force, base_url,
@@ -251,7 +239,7 @@ def _downloader_worker_thread(thread_num, q, force, base_url,
       if not output_filename.endswith('.tar.gz'):
         out_q.put('%d> Error: %s is not a tar.gz archive.' % (
                   thread_num, output_filename))
-        ret_codes.put((1, '%s is not a tar.gz archive.' % (output_filename)))
+        ret_codes.put((1, f'{output_filename} is not a tar.gz archive.'))
         continue
       extract_dir = output_filename[:-len('.tar.gz')]
     if os.path.exists(output_filename) and not force:
@@ -264,17 +252,14 @@ def _downloader_worker_thread(thread_num, q, force, base_url,
           out_q.put('%d> Extract dir %s does not exist, re-downloading...' %
                     (thread_num, extract_dir))
           skip = False
-        # .tmp file is created just before extraction and removed just after
-        # extraction. If such file exists, it means the process was terminated
-        # mid-extraction and therefore needs to be extracted again.
-        elif os.path.exists(extract_dir + '.tmp'):
+        elif os.path.exists(f'{extract_dir}.tmp'):
           out_q.put('%d> Detected tmp flag file for %s, '
                     're-downloading...' % (thread_num, output_filename))
           skip = False
       if skip:
         continue
 
-    file_url = '%s/%s' % (base_url, input_sha1_sum)
+    file_url = f'{base_url}/{input_sha1_sum}'
 
     try:
       if delete:
@@ -291,22 +276,24 @@ def _downloader_worker_thread(thread_num, q, force, base_url,
       if code == 404:
         out_q.put('%d> File %s for %s does not exist, skipping.' % (
             thread_num, file_url, output_filename))
-        ret_codes.put((1, 'File %s for %s does not exist.' % (
-            file_url, output_filename)))
+        ret_codes.put((1, f'File {file_url} for {output_filename} does not exist.'))
       elif code == 401:
         out_q.put(
             """%d> Failed to fetch file %s for %s due to unauthorized access,
             skipping. Try running `gsutil.py config` and pass 0 if you don't
             know your project id.""" % (thread_num, file_url, output_filename))
-        ret_codes.put(
-            (1, 'Failed to fetch file %s for %s due to unauthorized access.' %
-             (file_url, output_filename)))
+        ret_codes.put((
+            1,
+            f'Failed to fetch file {file_url} for {output_filename} due to unauthorized access.',
+        ))
       else:
         # Other error, probably auth related (bad ~/.boto, etc).
         out_q.put('%d> Failed to fetch file %s for %s, skipping. [Err: %s]' %
                   (thread_num, file_url, output_filename, err))
-        ret_codes.put((code, 'Failed to fetch file %s for %s. [Err: %s]' %
-                       (file_url, output_filename, err)))
+        ret_codes.put((
+            code,
+            f'Failed to fetch file {file_url} for {output_filename}. [Err: {err}]',
+        ))
       continue
 
     remote_sha1 = get_sha1(output_filename)
@@ -321,7 +308,7 @@ def _downloader_worker_thread(thread_num, q, force, base_url,
       if not tarfile.is_tarfile(output_filename):
         out_q.put('%d> Error: %s is not a tar.gz archive.' % (
                   thread_num, output_filename))
-        ret_codes.put((1, '%s is not a tar.gz archive.' % (output_filename)))
+        ret_codes.put((1, f'{output_filename} is not a tar.gz archive.'))
         continue
       with tarfile.open(output_filename, 'r:gz') as tar:
         dirname = os.path.dirname(os.path.abspath(output_filename))
@@ -333,7 +320,7 @@ def _downloader_worker_thread(thread_num, q, force, base_url,
         if not _validate_tar_file(tar, os.path.basename(extract_dir)):
           out_q.put('%d> Error: %s contains files outside %s.' % (
                     thread_num, output_filename, extract_dir))
-          ret_codes.put((1, '%s contains invalid entries.' % (output_filename)))
+          ret_codes.put((1, f'{output_filename} contains invalid entries.'))
           continue
         if os.path.exists(extract_dir):
           try:
@@ -347,9 +334,9 @@ def _downloader_worker_thread(thread_num, q, force, base_url,
         out_q.put('%d> Extracting %d entries from %s to %s' %
                   (thread_num, len(tar.getmembers()),output_filename,
                    extract_dir))
-        with open(extract_dir + '.tmp', 'a'):
+        with open(f'{extract_dir}.tmp', 'a'):
           tar.extractall(path=dirname)
-        os.remove(extract_dir + '.tmp')
+        os.remove(f'{extract_dir}.tmp')
     # Set executable bit.
     if sys.platform == 'cygwin':
       # Under cygwin, mark all files as executable. The executable flag in
@@ -408,11 +395,10 @@ def _data_exists(input_sha1_sum, output_filename, extract):
       # out too early.
       return False
     extract_dir = output_filename[:-len('.tar.gz')]
-  if os.path.exists(output_filename):
-    if not extract or os.path.exists(extract_dir):
-      if get_sha1(output_filename) == input_sha1_sum:
-        return True
-  return False
+  return bool(
+      os.path.exists(output_filename)
+      and (not extract or os.path.exists(extract_dir))
+      and get_sha1(output_filename) == input_sha1_sum)
 
 
 def download_from_google_storage(
@@ -562,9 +548,9 @@ def main(args):
 
   # Set the boto file to /dev/null if we don't need auth.
   if options.no_auth:
-    if (set(('http_proxy', 'https_proxy')).intersection(
-        env.lower() for env in os.environ) and
-        'NO_AUTH_BOTO_CONFIG' not in os.environ):
+    if {'http_proxy', 'https_proxy'}.intersection(
+        (env.lower()
+         for env in os.environ)) and 'NO_AUTH_BOTO_CONFIG' not in os.environ:
       print('NOTICE: You have PROXY values set in your environment, but gsutil'
             'in depot_tools does not (yet) obey them.',
             file=sys.stderr)
@@ -582,8 +568,9 @@ def main(args):
     gsutil = Gsutil(GSUTIL_DEFAULT_PATH,
                     boto_path=options.boto)
   else:
-    parser.error('gsutil not found in %s, bad depot_tools checkout?' %
-                 GSUTIL_DEFAULT_PATH)
+    parser.error(
+        f'gsutil not found in {GSUTIL_DEFAULT_PATH}, bad depot_tools checkout?'
+    )
 
   # Passing in -g/--config will run our copy of GSUtil, then quit.
   if options.config:
@@ -607,19 +594,14 @@ def main(args):
     parser.error('--recursive specified but --directory not specified.')
   if options.output and options.directory:
     parser.error('--directory is specified, so --output has no effect.')
-  if (not (options.sha1_file or options.directory)
-      and options.auto_platform):
+  if not options.sha1_file and not options.directory and options.auto_platform:
     parser.error('--auto_platform must be specified with either '
                  '--sha1_file or --directory')
 
   input_filename = args[0]
 
-  # Set output filename if not specified.
   if not options.output and not options.directory:
-    if not options.sha1_file:
-      # Target is a sha1 sum, so output filename would also be the sha1 sum.
-      options.output = input_filename
-    elif options.sha1_file:
+    if options.sha1_file:
       # Target is a .sha1 file.
       if not input_filename.endswith('.sha1'):
         parser.error('--sha1_file is specified, but the input filename '
@@ -628,9 +610,9 @@ def main(args):
                      'extension, or specify --output.')
       options.output = input_filename[:-5]
     else:
-      parser.error('Unreachable state.')
-
-  base_url = 'gs://%s' % options.bucket
+      # Target is a sha1 sum, so output filename would also be the sha1 sum.
+      options.output = input_filename
+  base_url = f'gs://{options.bucket}'
 
   try:
     return download_from_google_storage(
@@ -639,7 +621,7 @@ def main(args):
       options.sha1_file, options.verbose, options.auto_platform,
       options.extract)
   except FileNotFoundError as e:
-    print("Fatal error: {}".format(e))
+    print(f"Fatal error: {e}")
     return 1
 
 

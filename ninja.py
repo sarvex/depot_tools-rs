@@ -33,7 +33,7 @@ def fallbackToLegacyNinja(ninja_args):
   elif sys.platform in ['win32', 'cygwin']:
     exe_name = 'ninja.exe'
   else:
-    print('depot_tools/ninja.py: %s is not supported platform' % sys.platform)
+    print(f'depot_tools/ninja.py: {sys.platform} is not supported platform')
     return 1
 
   ninja_path = os.path.join(DEPOT_TOOLS_ROOT, exe_name)
@@ -57,9 +57,7 @@ def findNinjaInPath():
 
 
 def fallback(ninja_args):
-  # Try to find ninja in PATH.
-  ninja_path = findNinjaInPath()
-  if ninja_path:
+  if ninja_path := findNinjaInPath():
     return subprocess.call([ninja_path] + ninja_args)
 
   # TODO(crbug.com/1340825): remove raw binaries from depot_tools.
@@ -73,8 +71,12 @@ def main(args):
   for base_path in [primary_solution_path, gclient_root_path]:
     if not base_path:
       continue
-    ninja_path = os.path.join(base_path, 'third_party', 'ninja',
-                              'ninja' + gclient_paths.GetExeSuffix())
+    ninja_path = os.path.join(
+        base_path,
+        'third_party',
+        'ninja',
+        f'ninja{gclient_paths.GetExeSuffix()}',
+    )
     if os.path.isfile(ninja_path):
       return subprocess.call([ninja_path] + args[1:])
 

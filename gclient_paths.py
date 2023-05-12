@@ -27,14 +27,14 @@ def FindGclientRoot(from_dir, filename='.gclient'):
       return None
     path = split_path[0]
 
-  logging.info('Found gclient root at ' + path)
+  logging.info(f'Found gclient root at {path}')
 
   if path == real_from_dir:
     return path
 
   # If we did not find the file in the current directory, make sure we are in a
   # sub directory that is controlled by this configuration.
-  entries_filename = os.path.join(path, filename + '_entries')
+  entries_filename = os.path.join(path, f'{filename}_entries')
   if not os.path.exists(entries_filename):
     # If .gclient_entries does not exist, a previous call to gclient sync
     # might have failed. In that case, we cannot verify that the .gclient
@@ -50,7 +50,7 @@ def FindGclientRoot(from_dir, filename='.gclient'):
   scope = {}
   try:
     exec(entries_content, scope)
-  except (SyntaxError, Exception) as e:
+  except Exception as e:
     gclient_utils.SyntaxErrorToError(filename, e)
 
   all_directories = scope['entries'].keys()
@@ -66,8 +66,7 @@ def FindGclientRoot(from_dir, filename='.gclient'):
 def GetPrimarySolutionPath():
   """Returns the full path to the primary solution. (gclient_root + src)"""
 
-  gclient_root = FindGclientRoot(os.getcwd())
-  if gclient_root:
+  if gclient_root := FindGclientRoot(os.getcwd()):
     # Some projects' top directory is not named 'src'.
     source_dir_name = GetGClientPrimarySolutionName(gclient_root) or 'src'
     return os.path.join(gclient_root, source_dir_name)
@@ -84,9 +83,7 @@ def GetPrimarySolutionPath():
   except subprocess2.CalledProcessError:
     pass
 
-  if os.path.exists(os.path.join(top_dir, 'buildtools')):
-    return top_dir
-  return None
+  return top_dir if os.path.exists(os.path.join(top_dir, 'buildtools')) else None
 
 
 def GetBuildtoolsPath():
@@ -110,10 +107,7 @@ def GetBuildtoolsPath():
   # buildtools may be in the gclient root.
   gclient_root = FindGclientRoot(os.getcwd())
   buildtools_path = os.path.join(gclient_root, 'buildtools')
-  if os.path.exists(buildtools_path):
-    return buildtools_path
-
-  return None
+  return buildtools_path if os.path.exists(buildtools_path) else None
 
 
 def GetBuildtoolsPlatformBinaryPath():
@@ -129,15 +123,13 @@ def GetBuildtoolsPlatformBinaryPath():
   elif sys.platform.startswith('linux'):
     subdir = 'linux64'
   else:
-    raise gclient_utils.Error('Unknown platform: ' + sys.platform)
+    raise gclient_utils.Error(f'Unknown platform: {sys.platform}')
   return os.path.join(buildtools_path, subdir)
 
 
 def GetExeSuffix():
   """Returns '' or '.exe' depending on how executables work on this platform."""
-  if sys.platform.startswith(('cygwin', 'win')):
-    return '.exe'
-  return ''
+  return '.exe' if sys.platform.startswith(('cygwin', 'win')) else ''
 
 
 def GetGClientPrimarySolutionName(gclient_root_dir_path):
@@ -146,7 +138,6 @@ def GetGClientPrimarySolutionName(gclient_root_dir_path):
   gclient_config_contents = gclient_utils.FileRead(gclient_config_file)
   env = {}
   exec(gclient_config_contents, env)
-  solutions = env.get('solutions', [])
-  if solutions:
+  if solutions := env.get('solutions', []):
     return solutions[0].get('name')
   return None

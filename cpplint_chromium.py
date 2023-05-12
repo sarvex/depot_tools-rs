@@ -43,8 +43,11 @@ def CheckPointerDeclarationWhitespace(filename, clean_lines, linenum, error):
     error: The function to call with any errors found.
   """
   line = clean_lines.elided[linenum]
-  matched = _RE_PATTERN_POINTER_DECLARATION_WHITESPACE.match(line)
-  if matched:
-    error(filename, linenum, 'whitespace/declaration', 3,
-          'Declaration has space between type name and %s in %s' %
-          (matched.group('pointer_operator'), matched.group(0).strip()))
+  if matched := _RE_PATTERN_POINTER_DECLARATION_WHITESPACE.match(line):
+    error(
+        filename,
+        linenum,
+        'whitespace/declaration',
+        3,
+        f"Declaration has space between type name and {matched.group('pointer_operator')} in {matched.group(0).strip()}",
+    )

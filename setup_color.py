@@ -31,13 +31,13 @@ def enable_native_ansi():
   if kernel32.GetConsoleMode(out_handle, ctypes.byref(mode)) == 0:
     return False
 
-  if not (mode.value & ENABLE_VIRTUAL_TERMINAL_PROCESSING):
-    if kernel32.SetConsoleMode(
-        out_handle, mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING) == 0:
-      print(
-          'kernel32.SetConsoleMode to enable ANSI sequences failed',
-          file=sys.stderr)
-      return False
+  if (not (mode.value & ENABLE_VIRTUAL_TERMINAL_PROCESSING)
+      and kernel32.SetConsoleMode(
+          out_handle, mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING) == 0):
+    print(
+        'kernel32.SetConsoleMode to enable ANSI sequences failed',
+        file=sys.stderr)
+    return False
 
   return True
 
@@ -111,17 +111,13 @@ def init():
         IS_TTY = name.startswith('msys-') and '-pty' in name
         if IS_TTY:
           OUT_TYPE = 'bash (msys)'
-    else:
-      # A normal file, or an unknown file type.
-      pass
   else:
     # This is non-windows, so we trust isatty.
     OUT_TYPE = 'pipe or file'
 
-  if IS_TTY and is_windows:
-    # Wrapping may cause errors on some Windows versions (crbug.com/1114548).
-    if platform.release() != '10' or enable_native_ansi():
-      should_wrap = False
+  if (IS_TTY and is_windows
+      and (platform.release() != '10' or enable_native_ansi())):
+    should_wrap = False
 
   colorama.init(wrap=should_wrap)
 

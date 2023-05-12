@@ -46,7 +46,7 @@ def fix_default_encoding():
   # pylint: disable=no-member
   sys.setdefaultencoding('utf-8')
   for attr in dir(locale):
-    if attr[0:3] != 'LC_':
+    if attr[:3] != 'LC_':
       continue
     aref = getattr(locale, attr)
     try:
@@ -61,7 +61,7 @@ def fix_default_encoding():
       try:
         locale.setlocale(aref, (lang, 'UTF-8'))
       except locale.Error:
-        os.environ[attr] = lang + '.UTF-8'
+        os.environ[attr] = f'{lang}.UTF-8'
   try:
     locale.setlocale(locale.LC_ALL, '')
   except locale.Error:
@@ -189,8 +189,8 @@ class WinUnicodeConsoleOutput(WinUnicodeOutputBase):
   Understands how to use the win32 console API.
   """
   def __init__(self, console_handle, fileno, stream_name, encoding):
-    super(WinUnicodeConsoleOutput, self).__init__(
-        fileno, '<Unicode console %s>' % stream_name, encoding)
+    super(WinUnicodeConsoleOutput,
+          self).__init__(fileno, f'<Unicode console {stream_name}>', encoding)
     # Handle to use for WriteConsoleW
     self._console_handle = console_handle
 
@@ -253,8 +253,8 @@ class WinUnicodeOutput(WinUnicodeOutputBase):
   code page. WriteConsoleW() permits writing any character.
   """
   def __init__(self, stream, fileno, encoding):
-    super(WinUnicodeOutput, self).__init__(
-        fileno, '<Unicode redirected %s>' % stream.name, encoding)
+    super(WinUnicodeOutput,
+          self).__init__(fileno, f'<Unicode redirected {stream.name}>', encoding)
     # Output stream
     self._stream = stream
 
@@ -294,8 +294,6 @@ def win_handle_is_a_console(handle):
   from ctypes import byref, POINTER, windll, WINFUNCTYPE
   from ctypes.wintypes import BOOL, DWORD, HANDLE
 
-  FILE_TYPE_CHAR   = 0x0002
-  FILE_TYPE_REMOTE = 0x8000
   INVALID_HANDLE_VALUE = DWORD(-1).value
 
   # <http://msdn.microsoft.com/en-us/library/ms683167.aspx>
@@ -304,9 +302,10 @@ def win_handle_is_a_console(handle):
   # <http://msdn.microsoft.com/en-us/library/aa364960.aspx>
   GetFileType = WINFUNCTYPE(DWORD, DWORD)(('GetFileType', windll.kernel32))
 
-  # GetStdHandle returns INVALID_HANDLE_VALUE, NULL, or a valid handle.
   if handle == INVALID_HANDLE_VALUE or handle is None:
     return False
+  FILE_TYPE_CHAR   = 0x0002
+  FILE_TYPE_REMOTE = 0x8000
   return (
       (GetFileType(handle) & ~FILE_TYPE_REMOTE) == FILE_TYPE_CHAR and
        GetConsoleMode(handle, byref(DWORD())))

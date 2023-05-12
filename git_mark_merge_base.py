@@ -41,7 +41,7 @@ def main(argv):
     try:
       remove_merge_base(cur)
     except CalledProcessError:
-      print('No merge base currently exists for %s.' % cur)
+      print(f'No merge base currently exists for {cur}.')
     return 0
 
   if opts.merge_base:
@@ -49,8 +49,9 @@ def main(argv):
       opts.merge_base = hash_one(opts.merge_base)
     except CalledProcessError:
       print(
-          'fatal: could not resolve %s as a commit' % opts.merge_base,
-          file=sys.stderr)
+          f'fatal: could not resolve {opts.merge_base} as a commit',
+          file=sys.stderr,
+      )
       return 1
 
     manual_merge_base(cur, opts.merge_base, upstream(cur))
@@ -59,9 +60,9 @@ def main(argv):
   actual = get_or_create_merge_base(cur)
   if opts.merge_base and opts.merge_base != actual:
     ret = 1
-    print("Invalid merge_base %s" % opts.merge_base)
+    print(f"Invalid merge_base {opts.merge_base}")
 
-  print("merge_base(%s): %s" % (cur, actual))
+  print(f"merge_base({cur}): {actual}")
   return ret
 
 

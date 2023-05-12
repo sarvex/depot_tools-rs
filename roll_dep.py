@@ -85,12 +85,12 @@ def get_log_url(upstream_url, head, tot):
   """Returns an URL to read logs via a Web UI if applicable."""
   if re.match(r'https://[^/]*\.googlesource\.com/', upstream_url):
     # gitiles
-    return '%s/+log/%s..%s' % (upstream_url, head[:12], tot[:12])
+    return f'{upstream_url}/+log/{head[:12]}..{tot[:12]}'
   if upstream_url.startswith('https://github.com/'):
     upstream_url = upstream_url.rstrip('/')
     if upstream_url.endswith('.git'):
       upstream_url = upstream_url[:-len('.git')]
-    return '%s/compare/%s...%s' % (upstream_url, head[:12], tot[:12])
+    return f'{upstream_url}/compare/{head[:12]}...{tot[:12]}'
   return None
 
 
@@ -99,9 +99,7 @@ def should_show_log(upstream_url):
   # Skip logs for very active projects.
   if upstream_url.endswith('/v8/v8.git'):
     return False
-  if 'webrtc' in upstream_url:
-    return False
-  return True
+  return 'webrtc' not in upstream_url
 
 
 def gclient(args):
@@ -112,8 +110,8 @@ def gclient(args):
 def generate_commit_message(
     full_dir, dependency, head, roll_to, no_log, log_limit):
   """Creates the commit message for this specific roll."""
-  commit_range = '%s..%s' % (head, roll_to)
-  commit_range_for_header = '%s..%s' % (head[:9], roll_to[:9])
+  commit_range = f'{head}..{roll_to}'
+  commit_range_for_header = f'{head[:9]}..{roll_to[:9]}'
   upstream_url = check_output(
       ['git', 'config', 'remote.origin.url'], cwd=full_dir).strip()
   log_url = get_log_url(upstream_url, head, roll_to)
@@ -134,11 +132,10 @@ def generate_commit_message(
       commit_range_for_header,
       nb_commits,
       's' if nb_commits > 1 else '',
-      ('; %s trivial rolls' % rolls) if rolls else '')
-  log_section = ''
-  if log_url:
-    log_section = log_url + '\n\n'
-  log_section += '$ %s ' % ' '.join(cmd)
+      f'; {rolls} trivial rolls' if rolls else '',
+  )
+  log_section = log_url + '\n\n' if log_url else ''
+  log_section += f"$ {' '.join(cmd)} "
   log_section += '--format=\'%ad %ae %s\'\n'
   log_section = log_section.replace(commit_range, commit_range_for_header)
   # It is important that --no-log continues to work, as it is used by
@@ -159,7 +156,7 @@ def calculate_roll(full_dir, dependency, roll_to):
   """
   head = gclient(['getdep', '-r', dependency])
   if not head:
-    raise Error('%s is unpinned.' % dependency)
+    raise Error(f'{dependency} is unpinned.')
   check_call(['git', 'fetch', 'origin', '--quiet'], cwd=full_dir)
   if roll_to == 'origin/HEAD':
     check_output(['git', 'remote', 'set-head', 'origin', '-a'], cwd=full_dir)
@@ -171,9 +168,7 @@ def calculate_roll(full_dir, dependency, roll_to):
 
 def gen_commit_msg(logs, cmdline, reviewers, bug):
   """Returns the final commit message."""
-  commit_msg = ''
-  if len(logs) > 1:
-    commit_msg = 'Rolling %d dependencies\n\n' % len(logs)
+  commit_msg = 'Rolling %d dependencies\n\n' % len(logs) if len(logs) > 1 else ''
   commit_msg += '\n\n'.join(logs)
   commit_msg += '\nCreated with:\n  ' + cmdline + '\n'
   commit_msg += 'R=%s\n' % ','.join(reviewers) if reviewers else ''
@@ -184,7 +179,7 @@ def gen_commit_msg(logs, cmdline, reviewers, bug):
 def finalize(commit_msg, current_dir, rolls):
   """Commits changes to the DEPS file, then uploads a CL."""
   print('Commit message:')
-  print('\n'.join('    ' + i for i in commit_msg.splitlines()))
+  print('\n'.join(f'    {i}' for i in commit_msg.splitlines()))
 
   check_call(['git', 'add', 'DEPS'], cwd=current_dir)
   check_call(['git', 'commit', '--quiet', '-m', commit_msg], cwd=current_dir)
@@ -237,38 +232,36 @@ def main():
   if args.reviewer:
     reviewers = list(itertools.chain(*[r.split(',') for r in args.reviewer]))
     for i, r in enumerate(reviewers):
-      if not '@' in r:
-        reviewers[i] = r + '@chromium.org'
+      if '@' not in r:
+        reviewers[i] = f'{r}@chromium.org'
 
   gclient_root = gclient(['root'])
   current_dir = os.getcwd()
   dependencies = sorted(d.replace('\\', '/').rstrip('/') for d in args.dep_path)
-  cmdline = 'roll-dep ' + ' '.join(dependencies) + ''.join(
-      ' --key ' + k for k in args.key)
+  cmdline = ('roll-dep ' + ' '.join(dependencies) + ''.join(f' --key {k}'
+                                                            for k in args.key))
   try:
     if not args.ignore_dirty_tree and not is_pristine(current_dir):
-      raise Error(
-          'Ensure %s is clean first (no non-merged commits).' % current_dir)
+      raise Error(f'Ensure {current_dir} is clean first (no non-merged commits).')
     # First gather all the information without modifying anything, except for a
     # git fetch.
     rolls = {}
     for dependency in dependencies:
       full_dir = os.path.normpath(os.path.join(gclient_root, dependency))
       if not os.path.isdir(full_dir):
-        print('Dependency %s not found at %s' % (dependency, full_dir))
+        print(f'Dependency {dependency} not found at {full_dir}')
         full_dir = os.path.normpath(os.path.join(current_dir, dependency))
-        print('Will look for relative dependency at %s' % full_dir)
+        print(f'Will look for relative dependency at {full_dir}')
         if not os.path.isdir(full_dir):
-          raise Error('Directory not found: %s (%s)' % (dependency, full_dir))
+          raise Error(f'Directory not found: {dependency} ({full_dir})')
 
       head, roll_to = calculate_roll(full_dir, dependency, args.roll_to)
       if roll_to == head:
         if len(dependencies) == 1:
           raise AlreadyRolledError('No revision to roll!')
-        print('%s: Already at latest commit %s' % (dependency, roll_to))
+        print(f'{dependency}: Already at latest commit {roll_to}')
       else:
-        print(
-            '%s: Rolling from %s to %s' % (dependency, head[:10], roll_to[:10]))
+        print(f'{dependency}: Rolling from {head[:10]} to {roll_to[:10]}')
         rolls[dependency] = (head, roll_to, full_dir)
 
     logs = []
@@ -277,7 +270,7 @@ def main():
       log = generate_commit_message(
           full_dir, dependency, head, roll_to, args.no_log, args.log_limit)
       logs.append(log)
-      setdep_args.extend(['-r', '{}@{}'.format(dependency, roll_to)])
+      setdep_args.extend(['-r', f'{dependency}@{roll_to}'])
 
     gclient(['setdep'] + setdep_args)
 

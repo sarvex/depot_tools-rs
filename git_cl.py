@@ -207,10 +207,7 @@ def RunGit(args, **kwargs):
 
 def RunGitWithCode(args, suppress_stderr=False):
   """Returns return code and stdout."""
-  if suppress_stderr:
-    stderr = subprocess2.DEVNULL
-  else:
-    stderr = sys.stderr
+  stderr = subprocess2.DEVNULL if suppress_stderr else sys.stderr
   try:
     (out, _), code = subprocess2.communicate(['git'] + args,
                                              env=GetNoGitPagerEnv(),
@@ -256,12 +253,12 @@ def confirm_or_exit(prefix='', action='confirm'):
   else:
     mid = ' press'
   gclient_utils.AskForData(
-      '%s%s Enter to %s, or Ctrl+C to abort' % (prefix, mid, action))
+      f'{prefix}{mid} Enter to {action}, or Ctrl+C to abort')
 
 
 def ask_for_explicit_yes(prompt):
   """Returns whether user typed 'y' or 'yes' to confirm the given prompt."""
-  result = gclient_utils.AskForData(prompt + ' [Yes/No]: ').lower()
+  result = gclient_utils.AskForData(f'{prompt} [Yes/No]: ').lower()
   while True:
     if 'yes'.startswith(result):
       return True
@@ -288,9 +285,9 @@ def _call_buildbucket(http, buildbucket_host, method, request):
     'Content-Type': 'application/json',
   }
   request = json.dumps(request)
-  url = 'https://%s/prpc/buildbucket.v2.Builds/%s' % (buildbucket_host, method)
+  url = f'https://{buildbucket_host}/prpc/buildbucket.v2.Builds/{method}'
 
-  logging.info('POST %s with %s' % (url, request))
+  logging.info(f'POST {url} with {request}')
 
   attempts = 1
   time_to_sleep = 1
@@ -299,8 +296,7 @@ def _call_buildbucket(http, buildbucket_host, method, request):
     if response.status == 200:
       return json.loads(content[4:])
     if attempts >= MAX_ATTEMPTS or 400 <= response.status < 500:
-      msg = '%s error when calling POST %s with %s: %s' % (
-          response.status, url, request, content)
+      msg = f'{response.status} error when calling POST {url} with {request}: {content}'
       raise BuildbucketResponseException(msg)
     logging.debug(
         '%s error when calling POST %s with %s. '
@@ -328,7 +324,7 @@ def _parse_bucket(raw_bucket):
     bucket = raw_bucket
   # Legacy buckets.
   if legacy and project and bucket:
-    print('WARNING Please use %s/%s to specify the bucket.' % (project, bucket))
+    print(f'WARNING Please use {project}/{bucket} to specify the bucket.')
   return project, bucket
 
 
@@ -339,13 +335,13 @@ def _canonical_git_googlesource_host(host):
   prefix = host[:-(1 + len(_GOOGLESOURCE))]
   if prefix.endswith('-review'):
     prefix = prefix[:-len('-review')]
-  return prefix + '.' + _GOOGLESOURCE
+  return f'{prefix}.{_GOOGLESOURCE}'
 
 
 def _canonical_gerrit_googlesource_host(host):
   git_host = _canonical_git_googlesource_host(host)
   prefix = git_host.split('.', 1)[0]
-  return prefix + '-review.' + _GOOGLESOURCE
+  return f'{prefix}-review.{_GOOGLESOURCE}'
 
 
 def _get_counterpart_host(host):
@@ -365,7 +361,7 @@ def _trigger_tryjobs(changelist, jobs, options, patchset):
   """
   print('Scheduling jobs on:')
   for project, bucket, builder in jobs:
-    print('  %s/%s: %s' % (project, bucket, builder))
+    print(f'  {project}/{bucket}: {builder}')
   print('To see results here, run:        git cl try-results')
   print('To see results in browser, run:  git cl web')
 
@@ -380,12 +376,11 @@ def _trigger_tryjobs(changelist, jobs, options, patchset):
   batch_response = _call_buildbucket(
       http, options.buildbucket_host, 'Batch', batch_request)
 
-  errors = [
+  if errors := [
       '  ' + response['error']['message']
       for response in batch_response.get('responses', [])
       if 'error' in response
-  ]
-  if errors:
+  ]:
     raise BuildbucketResponseException(
         'Failed to schedule builds for some bots:\n%s' % '\n'.join(errors))
 
@@ -398,7 +393,7 @@ def _make_tryjob_schedule_requests(changelist, jobs, options, patchset):
   }
   if options.ensure_value('clobber', False):
     shared_properties['clobber'] = True
-  shared_properties.update(_get_properties_from_options(options) or {})
+  shared_properties |= (_get_properties_from_options(options) or {})
 
   shared_tags = [{'key': 'user_agent', 'value': 'git_cl_try'}]
   if options.ensure_value('retry_failed', False):
@@ -449,16 +444,16 @@ def _fetch_tryjobs(changelist, buildbucket_host, patchset=None):
       'predicate': {
           'gerritChanges': [changelist.GetGerritChange(patchset)],
       },
-      'fields': ','.join('builds.*.' + field for field in fields),
+      'fields': ','.join(f'builds.*.{field}' for field in fields),
   }
 
   authenticator = auth.Authenticator()
   if authenticator.has_cached_credentials():
     http = authenticator.authorize(httplib2.Http())
   else:
-    print('Warning: Some results might be missing because %s' %
-          # Get the message on how to login.
-          (str(auth.LoginRequiredError()),))
+    print(
+        f'Warning: Some results might be missing because {str(auth.LoginRequiredError())}'
+    )
     http = httplib2.Http()
   http.force_exception_to_status_code = True
 
@@ -574,7 +569,7 @@ def _print_tryjobs(options, builds):
     if not options.color or color is None:
       colorize = lambda x: x
     else:
-      colorize = lambda x: '%s%s%s' % (color, x, Fore.RESET)
+      colorize = lambda x: f'{color}{x}{Fore.RESET}'
 
     print(colorize(title))
     for b in sorted(builds, key=sort_key):
@@ -832,9 +827,7 @@ class Settings(object):
     result = self._GetConfig('gerrit.override-squash-uploads').lower()
     if result == 'true':
       return True
-    if result == 'false':
-      return False
-    return None
+    return False if result == 'false' else None
 
   def GetIsGerrit(self):
     """Return True if gerrit.host is set."""
@@ -942,18 +935,14 @@ def ParseIssueNumberArgument(arg):
   # But old GWT UI is https://domain/#/c/project/+/<issue_number>[/[patchset]]
   # Short urls like https://domain/<issue_number> can be used, but don't allow
   # specifying the patchset (you'd 404), but we allow that here.
-  if parsed_url.path == '/':
-    part = parsed_url.fragment
-  else:
-    part = parsed_url.path
-
+  part = parsed_url.fragment if parsed_url.path == '/' else parsed_url.path
   match = re.match(
       r'(/c(/.*/\+)?)?/(?P<issue>\d+)(/(?P<patchset>\d+)?/?)?$', part)
   if not match:
     return fail_result
 
-  issue = int(match.group('issue'))
-  patchset = match.group('patchset')
+  issue = int(match['issue'])
+  patchset = match['patchset']
   return _ParsedIssueNumberArgument(
       issue=issue,
       patchset=int(patchset) if patchset else None,
@@ -963,15 +952,15 @@ def ParseIssueNumberArgument(arg):
 def _create_description_from_log(args):
   """Pulls out the commit log to use as a base for the CL description."""
   log_args = []
-  if len(args) == 1 and args[0] == None:
+  if len(args) == 1 and args[0] is None:
     # Handle the case where None is passed as the branch.
     return ''
   if len(args) == 1 and not args[0].endswith('.'):
-    log_args = [args[0] + '..']
+    log_args = [f'{args[0]}..']
   elif len(args) == 1 and args[0].endswith('...'):
     log_args = [args[0][:-1]]
   elif len(args) == 2:
-    log_args = [args[0] + '..' + args[1]]
+    log_args = [f'{args[0]}..{args[1]}']
   else:
     log_args = args[:]  # Hope for the best!
   return RunGit(['log', '--pretty=format:%B%n'] + log_args)
@@ -984,8 +973,7 @@ class GerritChangeNotExists(Exception):
     super(GerritChangeNotExists, self).__init__()
 
   def __str__(self):
-    return 'change %s at %s does not exist or you have no access to it' % (
-        self.issue, self.url)
+    return f'change {self.issue} at {self.url} does not exist or you have no access to it'
 
 
 _CommentSummary = collections.namedtuple(
@@ -1046,7 +1034,7 @@ class Changelist(object):
     if codereview_host is not None:
       assert not codereview_host.startswith('https://'), codereview_host
       self._gerrit_host = codereview_host
-      self._gerrit_server = 'https://%s' % codereview_host
+      self._gerrit_server = f'https://{codereview_host}'
 
   @property
   def owners_client(self):
@@ -1101,8 +1089,8 @@ class Changelist(object):
   def _GitSetBranchConfigValue(self, key, value):
     action = 'set %s to %r' % (key, value)
     if not value:
-      action = 'unset %s' % key
-    assert self.GetBranch(), 'a branch is needed to ' + action
+      action = f'unset {key}'
+    assert self.GetBranch(), f'a branch is needed to {action}'
     return scm.GIT.SetBranchConfig(
         settings.GetRoot(), self.GetBranch(), key, value)
 
@@ -1136,7 +1124,7 @@ class Changelist(object):
       remote, upstream_branch = self.FetchUpstreamTuple(self.GetBranch())
       if remote != '.':
         upstream_branch = upstream_branch.replace('refs/heads/',
-                                                  'refs/remotes/%s/' % remote)
+                                                  f'refs/remotes/{remote}/')
         upstream_branch = upstream_branch.replace('refs/branch-heads/',
                                                   'refs/remotes/branch-heads/')
       self.upstream_branch = upstream_branch
@@ -1170,7 +1158,7 @@ class Changelist(object):
       elif branch.startswith('refs/branch-heads/'):
         self._remote = (remote, branch.replace('refs/', 'refs/remotes/'))
       else:
-        self._remote = (remote, 'refs/remotes/%s/%s' % (remote, branch))
+        self._remote = remote, f'refs/remotes/{remote}/{branch}'
     return self._remote
 
   def GetRemoteUrl(self):
@@ -1183,7 +1171,7 @@ class Changelist(object):
       return value
 
     remote, _ = self.GetRemoteBranch()
-    url = scm.GIT.GetConfig(settings.GetRoot(), 'remote.%s.url' % remote, '')
+    url = scm.GIT.GetConfig(settings.GetRoot(), f'remote.{remote}.url', '')
 
     # Check if the remote url can be parsed as an URL.
     host = urllib.parse.urlparse(url).netloc
@@ -1203,7 +1191,7 @@ class Changelist(object):
       return None
 
     cache_path = url
-    url = scm.GIT.GetConfig(url, 'remote.%s.url' % remote, '')
+    url = scm.GIT.GetConfig(url, f'remote.{remote}.url', '')
 
     host = urllib.parse.urlparse(url).netloc
     if not host:
@@ -1238,7 +1226,7 @@ class Changelist(object):
     server = self.GetCodereviewServer()
     if short:
       server = _KNOWN_GERRIT_TO_SHORT_URLS.get(server, server)
-    return '%s/%s' % (server, issue)
+    return f'{server}/{issue}'
 
   def GetUsePython3(self):
     return settings.GetUsePython3()
@@ -1276,10 +1264,7 @@ class Changelist(object):
   def SetPatchset(self, patchset):
     """Set this branch's patchset. If patchset=0, clears the patchset."""
     assert self.GetBranch()
-    if not patchset:
-      self.patchset = None
-    else:
-      self.patchset = int(patchset)
+    self.patchset = None if not patchset else int(patchset)
     self._GitSetBranchConfigValue(PATCHSET_CONFIG_KEY, str(self.patchset))
 
   def SetIssue(self, issue=None):
@@ -1289,8 +1274,7 @@ class Changelist(object):
       issue = int(issue)
       self._GitSetBranchConfigValue(ISSUE_CONFIG_KEY, str(issue))
       self.issue = issue
-      codereview_server = self.GetCodereviewServer()
-      if codereview_server:
+      if codereview_server := self.GetCodereviewServer():
         self._GitSetBranchConfigValue(
             CODEREVIEW_SERVER_CONFIG_KEY, codereview_server)
     else:
@@ -1503,10 +1487,10 @@ class Changelist(object):
           r'^(?P<type>bug|fix(?:e[sd])?)[_-]?(?P<bugnum>\d+)([-_]|$)',
           self.GetBranch())
       if not bug and not fixed and match:
-        if match.group('type') == 'bug':
-          bug = match.group('bugnum')
+        if match['type'] == 'bug':
+          bug = match['bugnum']
         else:
-          fixed = match.group('bugnum')
+          fixed = match['bugnum']
 
     change_description = ChangeDescription(description, bug, fixed)
 
@@ -1554,12 +1538,10 @@ class Changelist(object):
     title = RunGit(['show', '-s', '--format=%s', 'HEAD']).strip()
     if options.force or options.skip_title:
       return title
-    user_title = gclient_utils.AskForData('Title for patchset [%s]: ' % title)
+    user_title = gclient_utils.AskForData(f'Title for patchset [{title}]: ')
 
     # Use the default title if the user confirms the default with a 'y'.
-    if user_title.lower() == 'y':
-      return title
-    return user_title or title
+    return title if user_title.lower() == 'y' else user_title or title
 
   def CMDUpload(self, options, git_diff_args, orig_args):
     """Uploads a change to codereview."""
@@ -1677,33 +1659,28 @@ class Changelist(object):
       if parsed.scheme == 'sso':
         print('WARNING: using non-https URLs for remote is likely broken\n'
               '  Your current remote is: %s' % self.GetRemoteUrl())
-        self._gerrit_host = '%s.googlesource.com' % self._gerrit_host
-        self._gerrit_server = 'https://%s' % self._gerrit_host
+        self._gerrit_host = f'{self._gerrit_host}.googlesource.com'
+        self._gerrit_server = f'https://{self._gerrit_host}'
     return self._gerrit_host
 
   def _GetGitHost(self):
     """Returns git host to be used when uploading change to Gerrit."""
     remote_url = self.GetRemoteUrl()
-    if not remote_url:
-      return None
-    return urllib.parse.urlparse(remote_url).netloc
+    return None if not remote_url else urllib.parse.urlparse(remote_url).netloc
 
   def GetCodereviewServer(self):
+    if not self._gerrit_server and self.GetIssue() and self.GetBranch():
+      self._gerrit_server = self._GitGetBranchConfigValue(
+          CODEREVIEW_SERVER_CONFIG_KEY)
+      if self._gerrit_server:
+        self._gerrit_host = urllib.parse.urlparse(self._gerrit_server).netloc
     if not self._gerrit_server:
-      # If we're on a branch then get the server potentially associated
-      # with that branch.
-      if self.GetIssue() and self.GetBranch():
-        self._gerrit_server = self._GitGetBranchConfigValue(
-            CODEREVIEW_SERVER_CONFIG_KEY)
-        if self._gerrit_server:
-          self._gerrit_host = urllib.parse.urlparse(self._gerrit_server).netloc
-      if not self._gerrit_server:
-        # We assume repo to be hosted on Gerrit, and hence Gerrit server
-        # has "-review" suffix for lowest level subdomain.
-        parts = self._GetGitHost().split('.')
-        parts[0] = parts[0] + '-review'
-        self._gerrit_host = '.'.join(parts)
-        self._gerrit_server = 'https://%s' % self._gerrit_host
+      # We assume repo to be hosted on Gerrit, and hence Gerrit server
+      # has "-review" suffix for lowest level subdomain.
+      parts = self._GetGitHost().split('.')
+      parts[0] = f'{parts[0]}-review'
+      self._gerrit_host = '.'.join(parts)
+      self._gerrit_server = f'https://{self._gerrit_host}'
     return self._gerrit_server
 
   def GetGerritProject(self):
@@ -1731,8 +1708,7 @@ class Changelist(object):
     Not to be confused by value of "Change-Id:" footer.
     If Gerrit project can be determined, this will speed up Gerrit HTTP API RPC.
     """
-    project = self.GetGerritProject()
-    if project:
+    if project := self.GetGerritProject():
       return gerrit_util.ChangeIdentifier(project, self.GetIssue())
     # Fall back on still unique, but less efficient change number.
     return str(self.GetIssue())
@@ -1807,8 +1783,8 @@ class Changelist(object):
     status = self._GetChangeDetail()['status']
     if status == 'ABANDONED':
       DieWithError(
-          'Change %s has been abandoned, new uploads are not allowed' %
-          (self.GetIssueURL()))
+          f'Change {self.GetIssueURL()} has been abandoned, new uploads are not allowed'
+      )
     if status == 'MERGED':
       answer = gclient_utils.AskForData(
           'Change %s has been submitted, new uploads are not allowed. '
@@ -1920,10 +1896,10 @@ class Changelist(object):
       return False
 
     data = self._GetChangeDetail(['ALL_REVISIONS'])
-    ps_kind = {}
-    for rev_info in data.get('revisions', {}).values():
-      ps_kind[rev_info['_number']] = rev_info.get('kind', '')
-
+    ps_kind = {
+        rev_info['_number']: rev_info.get('kind', '')
+        for rev_info in data.get('revisions', {}).values()
+    }
     for ps in range(lower, upper + 1):
       assert ps in ps_kind, 'expected patchset %d in change detail' % ps
       if ps_kind[ps] not in ('NO_CHANGE', 'NO_CODE_CHANGE'):
@@ -1987,10 +1963,9 @@ class Changelist(object):
     server = self.GetCodereviewServer()
     if server in _KNOWN_GERRIT_TO_SHORT_URLS:
       # /c/ is automatically added by short URL server.
-      url_prefix = '%s/%s' % (_KNOWN_GERRIT_TO_SHORT_URLS[server],
-                              self.GetIssue())
+      url_prefix = f'{_KNOWN_GERRIT_TO_SHORT_URLS[server]}/{self.GetIssue()}'
     else:
-      url_prefix = '%s/c/%s' % (server, self.GetIssue())
+      url_prefix = f'{server}/c/{self.GetIssue()}'
 
     for path, line_comments in file_comments.items():
       for comment in line_comments:
@@ -2003,16 +1978,12 @@ class Changelist(object):
         else:
           patchset = 'PS%d' % comment['patch_set']
         line = comment.get('line', 0)
-        url = ('%s/%s/%s#%s%s' %
-               (url_prefix, comment['patch_set'], path,
-                'b' if comment.get('side') == 'PARENT' else '',
-                str(line) if line else ''))
+        url = f"{url_prefix}/{comment['patch_set']}/{path}#{'b' if comment.get('side') == 'PARENT' else ''}{str(line) if line else ''}"
         comments[key][path][patchset][line] = (url, comment['message'])
 
     summaries = []
     for msg in messages:
-      summary = self._BuildCommentSummary(msg, comments, readable)
-      if summary:
+      if summary := self._BuildCommentSummary(msg, comments, readable):
         summaries.append(summary)
     return summaries
 
@@ -2046,7 +2017,7 @@ class Changelist(object):
             path_str = '%s:%d:' % (path, line)
           else:
             line_str = 'File comment'
-            path_str = '%s:0:' % path
+            path_str = f'{path}:0:'
           if readable:
             message += '\n  %s, %s: %s' % (patchset, line_str, url)
             message += '\n  %s\n' % content
@@ -2139,12 +2110,11 @@ class Changelist(object):
     # Note: git diff outputs nothing if there is no diff.
     if not last_upload or RunGit(['diff', last_upload]).strip():
       print('WARNING: Some changes from local branch haven\'t been uploaded.')
+    elif detail['current_revision'] == last_upload:
+      differs = False
     else:
-      if detail['current_revision'] == last_upload:
-        differs = False
-      else:
-        print('WARNING: Local branch contents differ from latest uploaded '
-              'patchset.')
+      print('WARNING: Local branch contents differ from latest uploaded '
+            'patchset.')
     if differs:
       if not force:
         confirm_or_exit(
@@ -2169,11 +2139,11 @@ class Changelist(object):
           realm=realm)
 
     self.SubmitIssue()
-    print('Issue %s has been submitted.' % self.GetIssueURL())
+    print(f'Issue {self.GetIssueURL()} has been submitted.')
     links = self._GetChangeCommit().get('web_links', [])
     for link in links:
       if link.get('name') in ['gitiles', 'browse'] and link.get('url'):
-        print('Landed as: %s' % link.get('url'))
+        print(f"Landed as: {link.get('url')}")
         break
     return 0
 
@@ -2181,12 +2151,11 @@ class Changelist(object):
                               newbranch):
     assert parsed_issue_arg.valid
 
-    self.issue = parsed_issue_arg.issue
-
     if parsed_issue_arg.hostname:
       self._gerrit_host = parsed_issue_arg.hostname
-      self._gerrit_server = 'https://%s' % self._gerrit_host
+      self._gerrit_server = f'https://{self._gerrit_host}'
 
+    self.issue = parsed_issue_arg.issue
     try:
       detail = self._GetChangeDetail(['ALL_REVISIONS'])
     except GerritChangeNotExists as e:
@@ -2214,8 +2183,9 @@ class Changelist(object):
     fetch_info['url'] = fetch_info['url'].rstrip('/')
 
     if remote_url != fetch_info['url']:
-      DieWithError('Trying to patch a change from %s but this repo appears '
-                   'to be %s.' % (fetch_info['url'], remote_url))
+      DieWithError(
+          f"Trying to patch a change from {fetch_info['url']} but this repo appears to be {remote_url}."
+      )
 
     RunGit(['fetch', fetch_info['url'], fetch_info['ref']])
 
@@ -2262,7 +2232,7 @@ class Changelist(object):
     # Crude attempt to distinguish Gerrit Codereview hook from a potentially
     # custom developer-made one.
     data = gclient_utils.FileRead(hook)
-    if not('From Gerrit Code Review' in data and 'add_ChangeId()' in data):
+    if 'From Gerrit Code Review' not in data or 'add_ChangeId()' not in data:
       return
     print('WARNING: You have Gerrit commit-msg hook installed.\n'
           'It is not necessary for uploading with git cl in squash mode, '
@@ -2295,12 +2265,12 @@ class Changelist(object):
   def _WriteGitPushTraces(self, trace_name, traces_dir, git_push_metadata):
     """Zip and write the git push traces stored in traces_dir."""
     gclient_utils.safe_makedirs(TRACES_DIR)
-    traces_zip = trace_name + '-traces'
-    traces_readme = trace_name + '-README'
+    traces_zip = f'{trace_name}-traces'
+    traces_readme = f'{trace_name}-README'
     # Create a temporary dir to store git config and gitcookies in. It will be
     # compressed and stored next to the traces.
     git_info_dir = tempfile.mkdtemp()
-    git_info_zip = trace_name + '-git-info'
+    git_info_zip = f'{trace_name}-git-info'
 
     git_push_metadata['now'] = datetime_now().strftime('%Y-%m-%dT%H:%M:%S.%f')
 

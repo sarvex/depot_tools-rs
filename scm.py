@@ -37,7 +37,7 @@ def GetCasedPath(path):
       # glob.glob will return the cased path for the last item only. This is why
       # we are calling it in a loop. Extract the data we want and put it back
       # into the list.
-      paths[i] = glob.glob(subpath + '*')[0][prev+1:len(subpath)]
+      paths[i] = glob.glob(f'{subpath}*')[0][prev+1:len(subpath)]
     path = '\\'.join(paths)
   return path
 
@@ -84,10 +84,7 @@ def determine_scm(root):
 
 
 def only_int(val):
-  if val.isdigit():
-    return int(val)
-
-  return 0
+  return int(val) if val.isdigit() else 0
 
 
 class GIT(object):
@@ -125,23 +122,26 @@ class GIT(object):
     Returns an array of (status, file) tuples."""
     if upstream_branch is None:
       upstream_branch = GIT.GetUpstreamBranch(cwd)
-      if upstream_branch is None:
-        raise gclient_utils.Error('Cannot determine upstream branch')
-    command = ['-c', 'core.quotePath=false', 'diff',
-               '--name-status', '--no-renames', '-r', '%s...' % upstream_branch]
+    if upstream_branch is None:
+      raise gclient_utils.Error('Cannot determine upstream branch')
+    command = [
+        '-c',
+        'core.quotePath=false',
+        'diff',
+        '--name-status',
+        '--no-renames',
+        '-r',
+        f'{upstream_branch}...',
+    ]
     status = GIT.Capture(command, cwd)
     results = []
     if status:
       for statusline in status.splitlines():
-        # 3-way merges can cause the status can be 'MMM' instead of 'M'. This
-        # can happen when the user has 2 local branches and he diffs between
-        # these 2 branches instead diffing to upstream.
-        m = re.match(r'^(\w)+\t(.+)$', statusline)
-        if not m:
-          raise gclient_utils.Error(
-              'status currently unsupported: %s' % statusline)
-        # Only grab the first letter.
-        results.append(('%s      ' % m.group(1)[0], m.group(2)))
+        if m := re.match(r'^(\w)+\t(.+)$', statusline):
+                # Only grab the first letter.
+          results.append((f'{m[1][0]}      ', m[2]))
+        else:
+          raise gclient_utils.Error(f'status currently unsupported: {statusline}')
     return results
 
   @staticmethod
@@ -154,21 +154,18 @@ class GIT(object):
   @staticmethod
   def GetBranchConfig(cwd, branch, key, default=None):
     assert branch, 'A branch must be given'
-    key = 'branch.%s.%s' % (branch, key)
+    key = f'branch.{branch}.{key}'
     return GIT.GetConfig(cwd, key, default)
 
   @staticmethod
   def SetConfig(cwd, key, value=None):
-    if value is None:
-      args = ['config', '--unset', key]
-    else:
-      args = ['config', key, value]
+    args = ['config', '--unset', key] if value is None else ['config', key, value]
     GIT.Capture(args, cwd=cwd)
 
   @staticmethod
   def SetBranchConfig(cwd, branch, key, value=None):
     assert branch, 'A branch must be given'
-    key = 'branch.%s.%s' % (branch, key)
+    key = f'branch.{branch}.{key}'
     GIT.SetConfig(cwd, key, value)
 
   @staticmethod
@@ -200,7 +197,7 @@ class GIT(object):
     if os.path.exists(cwd):
       try:
         # Try using local git copy first
-        ref = 'refs/remotes/%s/HEAD' % remote
+        ref = f'refs/remotes/{remote}/HEAD'
         ref = GIT.Capture(['symbolic-ref', ref], cwd=cwd)
         if not ref.endswith('master'):
           return ref
@@ -216,19 +213,17 @@ class GIT(object):
       resp = GIT.Capture(['ls-remote', '--symref', url, 'HEAD'])
       regex = r'^ref: (.*)\tHEAD$'
       for line in resp.split('\n'):
-        m = re.match(regex, line)
-        if m:
-          return ''.join(GIT.RefToRemoteRef(m.group(1), remote))
+        if m := re.match(regex, line):
+          return ''.join(GIT.RefToRemoteRef(m[1], remote))
     except subprocess2.CalledProcessError:
       pass
     # Return default branch
-    return 'refs/remotes/%s/main' % remote
+    return f'refs/remotes/{remote}/main'
 
   @staticmethod
   def GetBranch(cwd):
     """Returns the short branch name, e.g. 'main'."""
-    branchref = GIT.GetBranchRef(cwd)
-    if branchref:
+    if branchref := GIT.GetBranchRef(cwd):
       return GIT.ShortBranchName(branchref)
     return None
 
@@ -246,13 +241,11 @@ class GIT(object):
     except subprocess2.CalledProcessError:
       pass
     if branch:
-      upstream_branch = GIT.GetBranchConfig(cwd, branch, 'merge')
-      if upstream_branch:
+      if upstream_branch := GIT.GetBranchConfig(cwd, branch, 'merge'):
         remote = GIT.GetBranchConfig(cwd, branch, 'remote', '.')
         return remote, upstream_branch
 
-    upstream_branch = GIT.GetConfig(cwd, 'rietveld.upstream-branch')
-    if upstream_branch:
+    if upstream_branch := GIT.GetConfig(cwd, 'rietveld.upstream-branch'):
       remote = GIT.GetConfig(cwd, 'rietveld.upstream-remote', '.')
       return remote, upstream_branch
 
@@ -276,17 +269,11 @@ class GIT(object):
       A tuple of the remote ref's (common prefix, unique suffix), or None if it
       doesn't appear to refer to a remote ref (e.g. it's a commit hash).
     """
-    # TODO(mmoss): This is just a brute-force mapping based of the expected git
-    # config. It's a bit better than the even more brute-force replace('heads',
-    # ...), but could still be smarter (like maybe actually using values gleaned
-    # from the git config).
-    m = re.match('^(refs/(remotes/)?)?branch-heads/', ref or '')
-    if m:
-      return ('refs/remotes/branch-heads/', ref.replace(m.group(0), ''))
+    if m := re.match('^(refs/(remotes/)?)?branch-heads/', ref or ''):
+      return 'refs/remotes/branch-heads/', ref.replace(m[0], '')
 
-    m = re.match('^((refs/)?remotes/)?%s/|(refs/)?heads/' % remote, ref or '')
-    if m:
-      return ('refs/remotes/%s/' % remote, ref.replace(m.group(0), ''))
+    if m := re.match(f'^((refs/)?remotes/)?{remote}/|(refs/)?heads/', ref or ''):
+      return f'refs/remotes/{remote}/', ref.replace(m[0], '')
 
     return None
 
@@ -299,8 +286,8 @@ class GIT(object):
       return ref
     if ref.startswith('refs/remotes/branch-heads/'):
       return 'refs' + ref[len('refs/remotes'):]
-    if ref.startswith('refs/remotes/%s/' % remote):
-      return 'refs/heads' + ref[len('refs/remotes/%s' % remote):]
+    if ref.startswith(f'refs/remotes/{remote}/'):
+      return f"refs/heads{ref[len(f'refs/remotes/{remote}'):]}"
     return None
 
   @staticmethod
@@ -308,8 +295,7 @@ class GIT(object):
     """Gets the current branch's upstream branch."""
     remote, upstream_branch = GIT.FetchUpstreamTuple(cwd)
     if remote != '.' and upstream_branch:
-      remote_ref = GIT.RefToRemoteRef(upstream_branch, remote)
-      if remote_ref:
+      if remote_ref := GIT.RefToRemoteRef(upstream_branch, remote):
         upstream_branch = ''.join(remote_ref)
     return upstream_branch
 
@@ -329,7 +315,7 @@ class GIT(object):
     if platform.system() == 'Windows':
       # git show <sha>:<path> wants a posix path.
       filename = filename.replace('\\', '/')
-    command = ['show', '%s:%s' % (branch, filename)]
+    command = ['show', f'{branch}:{filename}']
     try:
       return GIT.Capture(command, cwd=cwd, strip_out=False)
     except subprocess2.CalledProcessError:
@@ -344,9 +330,16 @@ class GIT(object):
     files, usually in the prospect to apply the patch for a try job."""
     if not branch:
       branch = GIT.GetUpstreamBranch(cwd)
-    command = ['-c', 'core.quotePath=false', 'diff',
-               '-p', '--no-color', '--no-prefix', '--no-ext-diff',
-               branch + "..." + branch_head]
+    command = [
+        '-c',
+        'core.quotePath=false',
+        'diff',
+        '-p',
+        '--no-color',
+        '--no-prefix',
+        '--no-ext-diff',
+        f"{branch}...{branch_head}",
+    ]
     if full_move:
       command.append('--no-renames')
     else:
@@ -360,7 +353,7 @@ class GIT(object):
       # In the case of added files, replace /dev/null with the path to the
       # file being added.
       if diff[i].startswith('--- /dev/null'):
-        diff[i] = '--- %s' % diff[i+1][4:]
+        diff[i] = f'--- {diff[i + 1][4:]}'
     return ''.join(diff)
 
   @staticmethod
@@ -368,8 +361,13 @@ class GIT(object):
     """Returns the list of modified files between two branches."""
     if not branch:
       branch = GIT.GetUpstreamBranch(cwd)
-    command = ['-c', 'core.quotePath=false', 'diff',
-               '--name-only', branch + "..." + branch_head]
+    command = [
+        '-c',
+        'core.quotePath=false',
+        'diff',
+        '--name-only',
+        f"{branch}...{branch_head}",
+    ]
     return GIT.Capture(command, cwd=cwd).splitlines(False)
 
   @staticmethod
@@ -382,7 +380,7 @@ class GIT(object):
   def GetPatchName(cwd):
     """Constructs a name for this patch."""
     short_sha = GIT.Capture(['rev-parse', '--short=4', 'HEAD'], cwd=cwd)
-    return "%s#%s" % (GIT.GetBranch(cwd), short_sha)
+    return f"{GIT.GetBranch(cwd)}#{short_sha}"
 
   @staticmethod
   def GetCheckoutRoot(cwd):
@@ -436,9 +434,7 @@ class GIT(object):
     sha = GIT.ResolveCommit(cwd, rev)
     if sha is None:
       return False
-    if sha_only:
-      return sha == rev.lower()
-    return True
+    return sha == rev.lower() if sha_only else True
 
   @classmethod
   def AssertVersion(cls, min_version):
@@ -446,6 +442,6 @@ class GIT(object):
     if cls.current_version is None:
       current_version = cls.Capture(['--version'], '.')
       matched = re.search(r'git version (.+)', current_version)
-      cls.current_version = distutils.version.LooseVersion(matched.group(1))
+      cls.current_version = distutils.version.LooseVersion(matched[1])
     min_version = distutils.version.LooseVersion(min_version)
     return (min_version <= cls.current_version, cls.current_version)

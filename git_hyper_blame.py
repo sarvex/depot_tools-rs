@@ -45,7 +45,7 @@ class Commit(object):
     self.filename = None
 
   def __repr__(self):  # pragma: no cover
-    return '<Commit %s>' % self.commithash
+    return f'<Commit {self.commithash}>'
 
 
 BlameLine = collections.namedtuple(
@@ -135,11 +135,13 @@ def pretty_print(outbuf, parsedblame, show_filenames=False):
   for line in parsedblame:
     author_time = git_dates.timestamp_offset_to_datetime(
         line.commit.author_time, line.commit.author_tz)
-    row = [line.commit.commithash[:8],
-           '(' + line.commit.author,
-           git_dates.datetime_string(author_time),
-           str(line.lineno_now) + ('*' if line.modified else '') + ')',
-           line.context]
+    row = [
+        line.commit.commithash[:8],
+        f'({line.commit.author}',
+        git_dates.datetime_string(author_time),
+        str(line.lineno_now) + ('*' if line.modified else '') + ')',
+        line.context,
+    ]
     if show_filenames:
       row.insert(1, line.commit.filename)
     table.append(row)
@@ -168,7 +170,7 @@ def cache_diff_hunks(oldrev, newrev):
     except ValueError:
       start = s
       length = 1
-    return int(start), int(length)
+    return int(start), length
 
   try:
     return diff_hunks_cache[(oldrev, newrev)]
@@ -216,8 +218,8 @@ def approx_lineno_across_revs(filename, newfilename, revision, newrevision,
 
   # Use the <revision>:<filename> syntax to diff between two blobs. This is the
   # only way to diff a file that has been renamed.
-  old = '%s:%s' % (revision, filename)
-  new = '%s:%s' % (newrevision, newfilename)
+  old = f'{revision}:{filename}'
+  new = f'{newrevision}:{newfilename}'
   hunks = cache_diff_hunks(old, new)
 
   cumulative_offset = 0
@@ -329,8 +331,7 @@ def hyper_blame(outbuf, ignored, filename, revision):
 
 def parse_ignore_file(ignore_file):
   for line in ignore_file:
-    line = line.split('#', 1)[0].strip()
-    if line:
+    if line := line.split('#', 1)[0].strip():
       yield line
 
 

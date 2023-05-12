@@ -56,7 +56,7 @@ THIS_DIR = path.dirname(path.abspath(__file__))
 DEPOT_TOOLS_DIR = path.abspath(path.join(THIS_DIR, '..', '..', '..', '..'))
 
 CHROMIUM_GIT_HOST = 'https://chromium.googlesource.com'
-CHROMIUM_SRC_URL = CHROMIUM_GIT_HOST + '/chromium/src.git'
+CHROMIUM_SRC_URL = f'{CHROMIUM_GIT_HOST}/chromium/src.git'
 
 BRANCH_HEADS_REFSPEC = '+refs/branch-heads/*'
 TAGS_REFSPEC = '+refs/tags/*'
@@ -189,7 +189,7 @@ def call(*args, **kwargs):  # pragma: no cover
   out = BytesIO()
   new_env = kwargs.get('env', {})
   env = os.environ.copy()
-  env.update(new_env)
+  env |= new_env
   kwargs['env'] = env
   stale_process_duration = env.get('STALE_PROCESS_DURATION',
                                    STALE_PROCESS_DURATION)
@@ -197,9 +197,9 @@ def call(*args, **kwargs):  # pragma: no cover
   if new_env:
     print('===Injecting Environment Variables===')
     for k, v in sorted(new_env.items()):
-      print('%s: %s' % (k, v))
-  print('%s ===Running %s ===' % (datetime.now(), ' '.join(args),))
-  print('In directory: %s' % cwd)
+      print(f'{k}: {v}')
+  print(f"{datetime.now()} ===Running {' '.join(args)} ===")
+  print(f'In directory: {cwd}')
   start_time = time.time()
   try:
     proc = subprocess.Popen(args, **kwargs)
@@ -281,10 +281,10 @@ def get_gclient_spec(solutions, target_os, target_os_only, target_cpu,
                      git_cache_dir):
   return GCLIENT_TEMPLATE % {
       'solutions': pprint.pformat(solutions, indent=4),
-      'cache_dir': '"%s"' % git_cache_dir,
+      'cache_dir': f'"{git_cache_dir}"',
       'target_os': ('\ntarget_os=%s' % target_os) if target_os else '',
       'target_os_only': '\ntarget_os_only=%s' % target_os_only,
-      'target_cpu': ('\ntarget_cpu=%s' % target_cpu) if target_cpu else ''
+      'target_cpu': ('\ntarget_cpu=%s' % target_cpu) if target_cpu else '',
   }
 
 
@@ -295,30 +295,29 @@ def solutions_printer(solutions):
   for solution in solutions:
     name = solution.get('name')
     url = solution.get('url')
-    print('%s (%s)' % (name, url))
+    print(f'{name} ({url})')
     if solution.get('deps_file'):
-      print('  Dependencies file is %s' % solution['deps_file'])
+      print(f"  Dependencies file is {solution['deps_file']}")
     if 'managed' in solution:
-      print('  Managed mode is %s' % ('ON' if solution['managed'] else 'OFF'))
-    custom_vars = solution.get('custom_vars')
-    if custom_vars:
+      print(f"  Managed mode is {'ON' if solution['managed'] else 'OFF'}")
+    if custom_vars := solution.get('custom_vars'):
       print('  Custom Variables:')
       for var_name, var_value in sorted(custom_vars.items()):
-        print('    %s = %s' % (var_name, var_value))
+        print(f'    {var_name} = {var_value}')
     custom_deps = solution.get('custom_deps')
     if 'custom_deps' in solution:
       print('  Custom Dependencies:')
       for deps_name, deps_value in sorted(custom_deps.items()):
         if deps_value:
-          print('    %s -> %s' % (deps_name, deps_value))
+          print(f'    {deps_name} -> {deps_value}')
         else:
-          print('    %s: Ignore' % deps_name)
+          print(f'    {deps_name}: Ignore')
     for k, v in solution.items():
       # Print out all the keys we don't know about.
       if k in ['name', 'url', 'deps_file', 'custom_vars', 'custom_deps',
                'managed']:
         continue
-      print('  %s is %s' % (k, v))
+      print(f'  {k} is {v}')
     print()
 
 
@@ -338,8 +337,7 @@ def modify_solutions(input_solutions):
     # We don't want gclient to be using a safesync URL. Instead it should
     # using the lkgr/lkcr branch/tags.
     if 'safesync_url' in solution:
-      print('Removing safesync url %s from %s' % (solution['safesync_url'],
-                                                  parsed_path))
+      print(f"Removing safesync url {solution['safesync_url']} from {parsed_path}")
       del solution['safesync_url']
 
   return solutions
@@ -349,13 +347,12 @@ def remove(target, cleanup_dir):
   """Remove a target by moving it into cleanup_dir."""
   if not path.exists(cleanup_dir):
     os.makedirs(cleanup_dir)
-  dest = path.join(cleanup_dir, '%s_%s' % (
-      path.basename(target), uuid.uuid4().hex))
-  print('Marking for removal %s => %s' % (target, dest))
+  dest = path.join(cleanup_dir, f'{path.basename(target)}_{uuid.uuid4().hex}')
+  print(f'Marking for removal {target} => {dest}')
   try:
     os.rename(target, dest)
   except Exception as e:
-    print('Error renaming %s to %s: %s' % (target, dest, str(e)))
+    print(f'Error renaming {target} to {dest}: {str(e)}')
     raise
 
 
@@ -367,7 +364,7 @@ def ensure_no_checkout(dir_names, cleanup_dir):
   if has_checkout:
     for filename in os.listdir(build_dir):
       deletion_target = path.join(build_dir, filename)
-      print('.git detected in checkout, deleting %s...' % deletion_target,)
+      print(f'.git detected in checkout, deleting {deletion_target}...')
       remove(deletion_target, cleanup_dir)
       print('done')
 
@@ -379,8 +376,7 @@ def call_gclient(*args, **kwargs):
     args: command-line arguments to pass to gclient.
     kwargs: keyword arguments to pass to call.
   """
-  cmd = [sys.executable, '-u', GCLIENT_PATH]
-  cmd.extend(args)
+  cmd = [sys.executable, '-u', GCLIENT_PATH, *args]
   return call(*cmd, **kwargs)
 
 
@@ -427,7 +423,7 @@ def gclient_sync(with_branch_heads,
   for name, revision in sorted(revisions.items()):
     if revision.upper() == 'HEAD':
       revision = 'refs/remotes/origin/main'
-    args.extend(['--revision', '%s@%s' % (name, revision)])
+    args.extend(['--revision', f'{name}@{revision}'])
 
   if patch_refs:
     for patch_ref in patch_refs:
@@ -474,7 +470,7 @@ def normalize_git_url(url):
     upath = upath[len('/a'):]
   if upath.endswith('.git'):
     upath = upath[:-len('.git')]
-  return 'https://%s%s' % (p.netloc, upath)
+  return f'https://{p.netloc}{upath}'
 
 
 def create_manifest():
@@ -513,12 +509,8 @@ def get_commit_message_footer_map(message):
 
   # Parse the footer
   for line in lines:
-    m = COMMIT_FOOTER_ENTRY_RE.match(line)
-    if not m:
-      # If any single line isn't valid, continue anyway for compatibility with
-      # Gerrit (which itself uses JGit for this).
-      continue
-    footers[m.group(1)] = m.group(2).strip()
+    if m := COMMIT_FOOTER_ENTRY_RE.match(line):
+      footers[m.group(1)] = m.group(2).strip()
   return footers
 
 
@@ -568,7 +560,7 @@ def ref_to_remote_ref(ref):
   elif ref.startswith('refs/branch-heads/'):
     return 'refs/remotes/branch-heads/' + ref[len('refs/branch-heads/'):]
   elif ref.startswith('origin/'):
-    return 'refs/remotes/' + ref
+    return f'refs/remotes/{ref}'
   else:
     return ref
 
@@ -590,7 +582,7 @@ def get_target_branch_and_revision(solution_name, git_url, revisions):
     revision = 'HEAD'
 
   if not branch.startswith(('refs/', 'origin/')):
-    branch = 'refs/remotes/origin/' + branch
+    branch = f'refs/remotes/origin/{branch}'
   branch = ref_to_remote_ref(branch)
 
   return branch, revision
@@ -632,11 +624,11 @@ def _maybe_break_locks(checkout_path, tries=3):
       for filename in filenames:
         if filename.endswith('.lock'):
           to_break = os.path.join(dirpath, filename)
-          print('breaking lock: %s' % to_break)
+          print(f'breaking lock: {to_break}')
           try:
             os.remove(to_break)
           except OSError as ex:
-            print('FAILED to break lock: %s: %s' % (to_break, ex))
+            print(f'FAILED to break lock: {to_break}: {ex}')
             raise
 
   for _ in range(tries):
@@ -690,7 +682,7 @@ def _git_checkout(sln, sln_dir, revisions, refs, no_fetch_tags, git_cache_dir,
   # If cache still doesn't have required pin/refs, try again and fetch pin/refs
   # directly.
   if not _has_in_git_cache(pin, refs, git_cache_dir, url):
-    for attempt in range(3):
+    for _ in range(3):
       git(*populate_cmd)
       if _has_in_git_cache(pin, refs, git_cache_dir, url):
         break
@@ -707,7 +699,7 @@ def _git_checkout(sln, sln_dir, revisions, refs, no_fetch_tags, git_cache_dir,
       # If repo deletion was aborted midway, it may have left .git in broken
       # state.
       if path.exists(sln_dir) and is_broken_repo_dir(sln_dir):
-        print('Git repo %s appears to be broken, removing it' % sln_dir)
+        print(f'Git repo {sln_dir} appears to be broken, removing it')
         remove(sln_dir, cleanup_dir)
 
       # Use "tries=1", since we retry manually in this loop.
@@ -723,7 +715,7 @@ def _git_checkout(sln, sln_dir, revisions, refs, no_fetch_tags, git_cache_dir,
       if pin:
         git('fetch', 'origin', pin, cwd=sln_dir)
       for ref in refs:
-        refspec = '%s:%s' % (ref, ref_to_remote_ref(ref.lstrip('+')))
+        refspec = f"{ref}:{ref_to_remote_ref(ref.lstrip('+'))}"
         git('fetch', 'origin', refspec, cwd=sln_dir)
 
       # Windows sometimes has trouble deleting files.
@@ -740,13 +732,12 @@ def _git_checkout(sln, sln_dir, revisions, refs, no_fetch_tags, git_cache_dir,
       return
     except SubprocessFailed as e:
       # Exited abnormally, there's probably something wrong.
-      print('Something failed: %s.' % str(e))
-      if first_try:
-        first_try = False
-        # Lets wipe the checkout and try again.
-        remove(sln_dir, cleanup_dir)
-      else:
+      print(f'Something failed: {str(e)}.')
+      if not first_try:
         raise
+      first_try = False
+      # Lets wipe the checkout and try again.
+      remove(sln_dir, cleanup_dir)
 
 
 def _git_disable_gc(cwd):
@@ -765,10 +756,8 @@ def get_commit_position(git_path, revision='HEAD'):
   git_log = git('log', '--format=%B', '-n1', revision, cwd=git_path)
   footer_map = get_commit_message_footer_map(git_log)
 
-  # Search for commit position metadata
-  value = (footer_map.get(COMMIT_POSITION_FOOTER_KEY) or
-           footer_map.get(COMMIT_ORIGINAL_POSITION_FOOTER_KEY))
-  if value:
+  if value := (footer_map.get(COMMIT_POSITION_FOOTER_KEY)
+               or footer_map.get(COMMIT_ORIGINAL_POSITION_FOOTER_KEY)):
     return value
   return None
 
@@ -776,14 +765,10 @@ def get_commit_position(git_path, revision='HEAD'):
 def parse_got_revision(manifest, got_revision_mapping):
   """Translate git gclient revision mapping to build properties."""
   properties = {}
-  manifest = {
-      # Make sure path always ends with a single slash.
-      '%s/' % path.rstrip('/'): info
-      for path, info in manifest.items()
-  }
+  manifest = {f"{path.rstrip('/')}/": info for path, info in manifest.items()}
   for property_name, dir_name in got_revision_mapping.items():
     # Make sure dir_name always ends with a single slash.
-    dir_name = '%s/' % dir_name.rstrip('/')
+    dir_name = f"{dir_name.rstrip('/')}/"
     if dir_name not in manifest:
       continue
     info = manifest[dir_name]
@@ -792,16 +777,14 @@ def parse_got_revision(manifest, got_revision_mapping):
 
     properties[property_name] = revision
     if commit_position:
-      properties['%s_cp' % property_name] = commit_position
+      properties[f'{property_name}_cp'] = commit_position
 
   return properties
 
 
 def emit_json(out_file, did_run, **kwargs):
   """Write run information into a JSON file."""
-  output = {}
-  output.update({'did_run': did_run})
-  output.update(kwargs)
+  output = {'did_run': did_run} | kwargs
   with open(out_file, 'wb') as f:
     f.write(json.dumps(output, sort_keys=True).encode('utf-8'))
 
@@ -879,11 +862,11 @@ def parse_revisions(revisions, root):
       parsed_root = urlparse.urlparse(current_root)
       if parsed_root.scheme in ['http', 'https']:
         # We want to normalize git urls into .git urls.
-        normalized_root = 'https://' + parsed_root.netloc + parsed_root.path
+        normalized_root = f'https://{parsed_root.netloc}{parsed_root.path}'
         if not normalized_root.endswith('.git'):
           normalized_root += '.git'
       elif parsed_root.scheme:
-        print('WARNING: Unrecognized scheme %s, ignoring' % parsed_root.scheme)
+        print(f'WARNING: Unrecognized scheme {parsed_root.scheme}, ignoring')
         continue
       else:
         # This is probably a local path.
@@ -982,9 +965,7 @@ def parse_args():
     with open(options.revision_mapping_file, 'r') as f:
       options.revision_mapping = json.load(f)
   except Exception as e:
-    print(
-        'WARNING: Caught exception while parsing revision_mapping*: %s'
-        % (str(e),))
+    print(f'WARNING: Caught exception while parsing revision_mapping*: {str(e)}')
 
   # Because we print CACHE_DIR out into a .gclient file, and then later run
   # eval() on it, backslashes need to be escaped, otherwise "E:\b\build" gets
@@ -1015,21 +996,21 @@ def prepare(options, git_slns, active):
   first_sln = dir_names[0]
 
   # Split all the revision specifications into a nice dict.
-  print('Revisions: %s' % options.revision)
+  print(f'Revisions: {options.revision}')
   revisions = parse_revisions(options.revision, first_sln)
-  print('Fetching Git checkout at %s@%s' % (first_sln, revisions[first_sln]))
+  print(f'Fetching Git checkout at {first_sln}@{revisions[first_sln]}')
   return revisions, step_text
 
 
 def checkout(options, git_slns, specs, revisions, step_text):
-  print('Using Python version: %s' % (sys.version,))
+  print(f'Using Python version: {sys.version}')
   print('Checking git version...')
   ver = git('version').strip()
-  print('Using %s' % ver)
+  print(f'Using {ver}')
 
   try:
     protocol = git('config', '--get', 'protocol.version')
-    print('Using git protocol version %s' % protocol)
+    print(f'Using git protocol version {protocol}')
   except SubprocessFailed as e:
     print('git protocol version is not specified.')
 
@@ -1044,10 +1025,7 @@ def checkout(options, git_slns, specs, revisions, step_text):
     pass
 
   should_delete_dirty_file = False
-  experiments = []
-  if options.experiments:
-    experiments = options.experiments.split(',')
-
+  experiments = options.experiments.split(',') if options.experiments else []
   try:
     # Outer try is for catching patch failures and exiting gracefully.
     # Inner try is for catching gclient failures and retrying gracefully.
@@ -1091,15 +1069,17 @@ def checkout(options, git_slns, specs, revisions, step_text):
       should_delete_dirty_file = True
   except PatchFailed as e:
     # Tell recipes information such as root, got_revision, etc.
-    emit_json(options.output_json,
-              did_run=True,
-              root=first_sln,
-              patch_apply_return_code=e.code,
-              patch_root=options.patch_root,
-              patch_failure=True,
-              failed_patch_body=e.output,
-              step_text='%s PATCH FAILED' % step_text,
-              fixed_revisions=revisions)
+    emit_json(
+        options.output_json,
+        did_run=True,
+        root=first_sln,
+        patch_apply_return_code=e.code,
+        patch_root=options.patch_root,
+        patch_failure=True,
+        failed_patch_body=e.output,
+        step_text=f'{step_text} PATCH FAILED',
+        fixed_revisions=revisions,
+    )
     should_delete_dirty_file = True
     raise
   finally:
@@ -1107,8 +1087,7 @@ def checkout(options, git_slns, specs, revisions, step_text):
       try:
         os.remove(dirty_path)
       except OSError:
-        print('Dirty file %s has been removed by a different process.' %
-              dirty_path)
+        print(f'Dirty file {dirty_path} has been removed by a different process.')
 
   # Take care of got_revisions outputs.
   revision_mapping = GOT_REVISION_MAPPINGS.get(git_slns[0]['url'], {})
@@ -1186,11 +1165,7 @@ def main():
     # between infra failures (independent from patch author), and patch
     # failures (that patch author can fix). However, PatchFailure due to
     # download patch failure is still an infra problem.
-    if e.code == 3:
-      # Patch download problem.
-      return 87
-    # Genuine patch problem.
-    return 88
+    return 87 if e.code == 3 else 88
 
 
 if __name__ == '__main__':

@@ -175,13 +175,11 @@ def _toolchain_in_use(toolchain_path):
         return True
   # Look for Pytho:n 3 files that may be in use.
   python_dir = os.path.join(toolchain_path, 'python3', 'bin')
-  for component in (
-      os.path.join(python_dir, 'python3.exe'),
-      os.path.join(python_dir, 'DLLs', 'unicodedata.pyd'),
-      ):
-    if os.path.isfile(component) and _in_use(component):
-      return True
-  return False
+  return any(
+      os.path.isfile(component) and _in_use(component) for component in (
+          os.path.join(python_dir, 'python3.exe'),
+          os.path.join(python_dir, 'DLLs', 'unicodedata.pyd'),
+      ))
 
 
 

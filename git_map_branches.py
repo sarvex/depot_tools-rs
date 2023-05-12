@@ -132,8 +132,10 @@ class BranchMapper(object):
       # Avoid heavy import unless necessary.
       from git_cl import get_cl_statuses, color_for_status, Changelist
 
-      change_cls = [Changelist(branchref='refs/heads/'+b)
-                    for b in self.__branches_info.keys() if b]
+      change_cls = [
+          Changelist(branchref=f'refs/heads/{b}')
+          for b in self.__branches_info.keys() if b
+      ]
       status_info = get_cl_statuses(change_cls,
                                     fine_grained=self.verbosity > 2,
                                     max_processes=self.maxjobs)
@@ -155,9 +157,7 @@ class BranchMapper(object):
       if self.__check_cycle(branch):
         continue
       if not self.__branches_info[parent]:
-        branch_upstream = upstream(branch)
-        # If git can't find the upstream, mark the upstream as gone.
-        if branch_upstream:
+        if branch_upstream := upstream(branch):
           parent = branch_upstream
         else:
           self.__gone_branches.add(parent)
@@ -187,8 +187,10 @@ class BranchMapper(object):
       parent = self.__branches_info[cycle[-1]].upstream
       cycle.append(parent)
       if parent == branch:
-        print('Warning: Detected cycle in branches: {}'.format(
-            ' -> '.join(cycle)), file=sys.stderr)
+        print(
+            f"Warning: Detected cycle in branches: {' -> '.join(cycle)}",
+            file=sys.stderr,
+        )
         return True
     return False
 
@@ -280,13 +282,12 @@ class BranchMapper(object):
     # The Rietveld issue associated with the branch.
     if self.verbosity >= 2:
       (url, color, status) = ('', '', '') if self.__is_invalid_parent(branch) \
-          else self.__status_info[branch]
+            else self.__status_info[branch]
       if self.verbosity > 2:
-        line.append('{} ({})'.format(url, status) if url else '', color=color)
+        line.append(f'{url} ({status})' if url else '', color=color)
       else:
         line.append(url or '', color=color)
 
-    # The subject of the most recent commit on the branch.
     if self.show_subject:
       if branch:
         line.append(run('log', '-n1', '--format=%s', branch, '--'))
@@ -307,7 +308,7 @@ def print_desc():
     else:
       _, color, rest = line.split(None, 2)
       outline = line[:starpos+1]
-      outline += getattr(Fore, color.upper()) + " " + color + " " + Fore.RESET
+      outline += f"{getattr(Fore, color.upper())} {color} {Fore.RESET}"
       outline += rest
       print(outline)
   print('')

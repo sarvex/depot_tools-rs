@@ -19,15 +19,20 @@ import sys
 def show_log(path, authors, since='1 week ago'):
   """Display log in a single git repo."""
 
-  author_option = ' '.join(['--author=' + author for author in authors])
-  command = ' '.join(['git log', author_option, '--since="%s"' % since,
-                      'origin/HEAD', '| git shortlog'])
+  author_option = ' '.join([f'--author={author}' for author in authors])
+  command = ' '.join([
+      'git log',
+      author_option,
+      f'--since="{since}"',
+      'origin/HEAD',
+      '| git shortlog',
+  ])
   status = subprocess.Popen(['sh', '-c', command],
                             cwd=path,
                             stdout=subprocess.PIPE).communicate()[0].rstrip()
 
   if len(status.splitlines()) > 0:
-    print('---------- %s ----------' % path)
+    print(f'---------- {path} ----------')
     print(status)
 
 

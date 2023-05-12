@@ -65,9 +65,8 @@ def main():
   callout_re = re.compile(r'\x1b\[(\d+)c\n')
   callouts = collections.defaultdict(int)
   for i, line in enumerate(output.splitlines(True)):
-    m = callout_re.match(line)
-    if m:
-      callouts[i + int(m.group(1)) - len(callouts)] += 1
+    if m := callout_re.match(line):
+      callouts[i + int(m[1]) - len(callouts)] += 1
 
   output = callout_re.sub('', output)
 
@@ -76,6 +75,7 @@ def main():
   comment_marker = '###COMMENT###'
 
   callout_counter = 1
+  in_code = False
   if backend == 'xhtml11':
     preamble = (
         '</p></div><div class="listingblock"><div class="content"><pre><code>'
@@ -83,7 +83,6 @@ def main():
     postamble = '</code></pre></div></div><p><div class="paragraph">'
     c = ansi2html.Ansi2HTMLConverter(inline=True, scheme='dracula')
 
-    in_code = False
     body = c.convert(output, full=False)
     for i, line in enumerate(body.splitlines()):
       if line.startswith(comment_marker):
@@ -104,13 +103,10 @@ def main():
         if ext:
           ext += '<span>'
         w(line + ext + '\n')
-    if in_code:
-      w(postamble)
   else:
     preamble = '</simpara><literallayout class="monospaced">'
     postamble = '</literallayout><simpara>'
 
-    in_code = False
     body = simpleXML(output)
     for i, line in enumerate(body.splitlines()):
       if line.startswith(comment_marker):
@@ -127,8 +123,8 @@ def main():
           ext += '  <emphasis role="strong">(%d)</emphasis>' % callout_counter
           callout_counter += 1
         w(line + ext + '\n')
-    if in_code:
-      w(postamble)
+  if in_code:
+    w(postamble)
 
 
 if __name__ == '__main__':

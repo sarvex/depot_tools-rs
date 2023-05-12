@@ -59,12 +59,11 @@ class Watchlists(object):
   def _ContentsOfWatchlistsFile(self):
     """Read the WATCHLISTS file and return its contents."""
     try:
-      watchlists_file = open(self._GetRulesFilePath())
-      contents = watchlists_file.read()
-      watchlists_file.close()
+      with open(self._GetRulesFilePath()) as watchlists_file:
+        contents = watchlists_file.read()
       return contents
     except IOError as e:
-      logging.error("Cannot read %s: %s" % (self._GetRulesFilePath(), e))
+      logging.error(f"Cannot read {self._GetRulesFilePath()}: {e}")
       return ''
 
   def _LoadWatchlistRules(self):
@@ -77,17 +76,17 @@ class Watchlists(object):
     try:
       watchlists_data = eval(contents, {'__builtins__': None}, None)
     except SyntaxError as e:
-      logging.error("Cannot parse %s. %s" % (self._GetRulesFilePath(), e))
+      logging.error(f"Cannot parse {self._GetRulesFilePath()}. {e}")
       return
 
     defns = watchlists_data.get("WATCHLIST_DEFINITIONS")
     if not defns:
-      logging.error("WATCHLIST_DEFINITIONS not defined in %s" %
-                    self._GetRulesFilePath())
+      logging.error(
+          f"WATCHLIST_DEFINITIONS not defined in {self._GetRulesFilePath()}")
       return
     watchlists = watchlists_data.get("WATCHLISTS")
     if not watchlists:
-      logging.error("WATCHLISTS not defined in %s" % self._GetRulesFilePath())
+      logging.error(f"WATCHLISTS not defined in {self._GetRulesFilePath()}")
       return
     self._defns = defns
     self._watchlists = watchlists
@@ -96,15 +95,13 @@ class Watchlists(object):
     # on-the-fly multiple times per file.
     self._path_regexps = {}
     for name, rule in defns.items():
-      filepath = rule.get('filepath')
-      if not filepath:
-        continue
-      self._path_regexps[name] = re.compile(filepath)
+      if filepath := rule.get('filepath'):
+        self._path_regexps[name] = re.compile(filepath)
 
     # Verify that all watchlist names are defined
     for name in watchlists:
       if name not in defns:
-        logging.error("%s not defined in %s" % (name, self._GetRulesFilePath()))
+        logging.error(f"{name} not defined in {self._GetRulesFilePath()}")
 
   def GetWatchersForPaths(self, paths):
     """Fetch the list of watchers for |paths|
@@ -131,7 +128,7 @@ def main(argv):
   # Confirm that watchlists can be parsed and spew out the watchers
   if len(argv) < 2:
     print("Usage (from the base of repo):")
-    print("  %s [file-1] [file-2] ...." % argv[0])
+    print(f"  {argv[0]} [file-1] [file-2] ....")
     return 1
   wl = Watchlists(os.getcwd())
   watchers = wl.GetWatchersForPaths(argv[1:])

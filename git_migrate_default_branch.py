@@ -34,7 +34,7 @@ def GetGerritProject(remote_url):
 
 def GetGerritHost(git_host):
   parts = git_host.split('.')
-  parts[0] = parts[0] + '-review'
+  parts[0] = f'{parts[0]}-review'
   return '.'.join(parts)
 
 
@@ -44,7 +44,7 @@ def main():
   remote = remote.split("\n")[0]
   if not remote:
     raise RuntimeError('Could not find any remote')
-  url = scm.GIT.GetConfig(git_common.repo_root(), 'remote.%s.url' % remote)
+  url = scm.GIT.GetConfig(git_common.repo_root(), f'remote.{remote}.url')
   host = urllib.parse.urlparse(url).netloc
   if not host:
     raise RuntimeError('Could not find remote host')
@@ -83,7 +83,7 @@ def main():
       continue
 
     if 'master' in branch.upstream:
-      logging.info("Migrating %s branch..." % name)
+      logging.info(f"Migrating {name} branch...")
       new_upstream = branch.upstream.replace('master', 'main')
       git_common.run('branch', '--set-upstream-to', new_upstream, name)
       git_common.remove_merge_base(name)
@@ -98,5 +98,5 @@ if __name__ == '__main__':
       main()
       logging.info("Migration completed")
     except RuntimeError as e:
-      logging.error("Error %s" % str(e))
+      logging.error(f"Error {str(e)}")
       sys.exit(1)

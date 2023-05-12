@@ -51,7 +51,7 @@ def SaveConfig(config):
 
 def ShowMessage(countdown):
   whitelisted = '\n'.join(
-      ['  * %s' % config for config in ninjalog_uploader.ALLOWLISTED_CONFIGS])
+      [f'  * {config}' for config in ninjalog_uploader.ALLOWLISTED_CONFIGS])
   print("""
 Your ninjalog will be uploaded to build stats server. The uploaded log will be
 used to analyze user side build performance.
@@ -87,18 +87,19 @@ https://chromium.googlesource.com/chromium/tools/depot_tools/+/main/ninjalog.REA
 def main():
   config = LoadConfig()
 
-  if len(sys.argv) == 2 and sys.argv[1] == 'opt-in':
-    config['opt-in'] = True
-    config['countdown'] = 0
-    SaveConfig(config)
-    print('ninjalog upload is opted in.')
-    return 0
+  if len(sys.argv) == 2:
+    if sys.argv[1] == 'opt-in':
+      config['opt-in'] = True
+      config['countdown'] = 0
+      SaveConfig(config)
+      print('ninjalog upload is opted in.')
+      return 0
 
-  if len(sys.argv) == 2 and sys.argv[1] == 'opt-out':
-    config['opt-in'] = False
-    SaveConfig(config)
-    print('ninjalog upload is opted out.')
-    return 0
+    if sys.argv[1] == 'opt-out':
+      config['opt-in'] = False
+      SaveConfig(config)
+      print('ninjalog upload is opted out.')
+      return 0
 
   if 'opt-in' in config and not config['opt-in']:
     # Upload is opted out.

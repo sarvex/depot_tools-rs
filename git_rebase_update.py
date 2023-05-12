@@ -99,7 +99,7 @@ def remove_empty_branches(branch_tree):
 
     # If branch and parent have the same tree, then branch has to be marked
     # for deletion and its children and grand-children reparented to parent.
-    if git.hash_one(branch+":") == git.hash_one(parent+":"):
+    if git.hash_one(f"{branch}:") == git.hash_one(f"{parent}:"):
       ensure_root_checkout()
 
       logging.debug('branch %s merged to %s', branch, parent)
@@ -128,13 +128,13 @@ def remove_empty_branches(branch_tree):
     _, parent, old_parent = value
     if parent in tag_set:
       git.set_branch_config(branch, 'remote', '.')
-      git.set_branch_config(branch, 'merge', 'refs/tags/%s' % parent)
-      print('Reparented %s to track %s [tag] (was tracking %s)' %
-            (branch, parent, old_parent))
+      git.set_branch_config(branch, 'merge', f'refs/tags/{parent}')
+      print(
+          f'Reparented {branch} to track {parent} [tag] (was tracking {old_parent})'
+      )
     else:
       git.run('branch', '--set-upstream-to', parent, branch)
-      print('Reparented %s to track %s (was tracking %s)' % (branch, parent,
-                                                             old_parent))
+      print(f'Reparented {branch} to track {parent} (was tracking {old_parent})')
 
   # Apply all deletions recorded, in order.
   for branch, _ in sorted(deletions.items(), key=lambda x: x[1]):
@@ -153,7 +153,7 @@ def rebase_branch(branch, parent, start_hash):
   while git.run('log', '-n1', '--format=%s',
                 parent, '--').startswith(git.FREEZE):
     back_ups += 1
-    parent = git.run('rev-parse', parent+'~')
+    parent = git.run('rev-parse', f'{parent}~')
 
   if back_ups:
     logging.debug('Backed parent up by %d from %s to %s',
@@ -167,7 +167,7 @@ def rebase_branch(branch, parent, start_hash):
       # TODO(iannucci): Find collapsible branches in a smarter way?
       print("Failed! Attempting to squash", branch, "...", end=' ')
       sys.stdout.flush()
-      squash_branch = branch+"_squash_attempt"
+      squash_branch = f"{branch}_squash_attempt"
       git.run('checkout', '-b', squash_branch)
       git.squash_current_branch(merge_base=start_hash)
 
@@ -212,7 +212,7 @@ def rebase_branch(branch, parent, start_hash):
           """ % branch))
           return False
   else:
-    print('%s up-to-date' % branch)
+    print(f'{branch} up-to-date')
 
   git.remove_merge_base(branch)
   git.get_or_create_merge_base(branch)
@@ -272,17 +272,17 @@ def main(args=None):
   if branches_to_rebase:
     skipped = set(skipped).intersection(branches_to_rebase)
   for branch in skipped:
-    print('Skipping %s: No upstream specified' % branch)
+    print(f'Skipping {branch}: No upstream specified')
 
   if not opts.no_fetch:
     fetch_remotes(branch_tree)
 
-  merge_base = {}
-  for branch, parent in branch_tree.items():
-    merge_base[branch] = git.get_or_create_merge_base(branch, parent)
-
-  logging.debug('branch_tree: %s' % pformat(branch_tree))
-  logging.debug('merge_base: %s' % pformat(merge_base))
+  merge_base = {
+      branch: git.get_or_create_merge_base(branch, parent)
+      for branch, parent in branch_tree.items()
+  }
+  logging.debug(f'branch_tree: {pformat(branch_tree)}')
+  logging.debug(f'merge_base: {pformat(merge_base)}')
 
   retcode = 0
   unrebased_branches = []
@@ -299,22 +299,21 @@ def main(args=None):
       if not ret:
         retcode = 1
 
-        if opts.keep_going:
-          print('--keep-going set, continuing with next branch.')
-          unrebased_branches.append(branch)
-          if git.in_rebase():
-            git.run_with_retcode('rebase', '--abort')
-          if git.in_rebase():  # pragma: no cover
-            print('Failed to abort rebase. Something is really wrong.')
-            break
-        else:
+        if not opts.keep_going:
           break
 
+        print('--keep-going set, continuing with next branch.')
+        unrebased_branches.append(branch)
+        if git.in_rebase():
+          git.run_with_retcode('rebase', '--abort')
+        if git.in_rebase():  # pragma: no cover
+          print('Failed to abort rebase. Something is really wrong.')
+          break
   if unrebased_branches:
     print()
     print('The following branches could not be cleanly rebased:')
     for branch in unrebased_branches:
-      print('  %s' % branch)
+      print(f'  {branch}')
 
   if not retcode:
     if not opts.keep_empty:
@@ -327,8 +326,9 @@ def main(args=None):
     else:
       root_branch = git.root()
       if return_branch != 'HEAD':
-        print("%s was merged with its parent, checking out %s instead." %
-              (git.unicode_repr(return_branch), git.unicode_repr(root_branch)))
+        print(
+            f"{git.unicode_repr(return_branch)} was merged with its parent, checking out {git.unicode_repr(root_branch)} instead."
+        )
       git.run('checkout', root_branch)
 
     # return_workdir may also not be there any more.

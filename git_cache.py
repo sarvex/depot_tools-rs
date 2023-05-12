@@ -109,10 +109,10 @@ class Mirror(object):
     parts = spec.split(':', 1)
     src = parts[0].lstrip('+').rstrip('/')
     if not src.startswith('refs/'):
-      src = 'refs/heads/%s' % src
+      src = f'refs/heads/{src}'
     dest = parts[1].rstrip('/') if len(parts) > 1 else src
     regex = r'\+%s:.*' % src.replace('*', r'\*')
-    return ('+%s:%s' % (src, dest), regex)
+    return f'+{src}:{dest}', regex
 
   def __init__(self, url, refs=None, commits=None, print_func=None):
     self.url = url
@@ -139,8 +139,7 @@ class Mirror(object):
 
   @property
   def bootstrap_bucket(self):
-    b = os.getenv('OVERRIDE_BOOTSTRAP_BUCKET')
-    if b:
+    if b := os.getenv('OVERRIDE_BOOTSTRAP_BUCKET'):
       return b
     u = urlparse.urlparse(self.url)
     if u.netloc == 'chromium.googlesource.com':
@@ -150,7 +149,7 @@ class Mirror(object):
 
   @property
   def _gs_path(self):
-    return 'gs://%s/v2/%s' % (self.bootstrap_bucket, self.basedir)
+    return f'gs://{self.bootstrap_bucket}/v2/{self.basedir}'
 
   @classmethod
   def FromPath(cls, path):
@@ -178,7 +177,7 @@ class Mirror(object):
   def CacheDirToUrl(path):
     """Convert a cache dir path to its corresponding url."""
     netpath = re.sub(r'\b-\b', '/', os.path.basename(path)).replace('--', '-')
-    return 'https://%s' % netpath
+    return f'https://{netpath}'
 
   @classmethod
   def SetCachePath(cls, cachepath):
@@ -214,12 +213,9 @@ class Mirror(object):
       # Given <path>/<number>.ready,
       # we are interested in <path>/<number> directory
       if m and (name[:-len('.ready')] + '/') in ls_out_set:
-        ready_dirs.append((int(m.group(1)), name[:-len('.ready')]))
+        ready_dirs.append((int(m[1]), name[:-len('.ready')]))
 
-    if not ready_dirs:
-      return None
-
-    return max(ready_dirs)[1]
+    return None if not ready_dirs else max(ready_dirs)[1]
 
   def Rename(self, src, dst):
     # This is somehow racy on Windows.
@@ -227,9 +223,10 @@ class Mirror(object):
     # pylint complains.
     exponential_backoff_retry(
         lambda: os.rename(src, dst),
-        excs=(OSError,),
-        name='rename [%s] => [%s]' % (src, dst),
-        printerr=self.print)
+        excs=(OSError, ),
+        name=f'rename [{src}] => [{dst}]',
+        printerr=self.print,
+    )
 
   def RunGit(self, cmd, print_stdout=True, **kwargs):
     """Run git in a subprocess."""
@@ -240,7 +237,7 @@ class Mirror(object):
     env = kwargs.get('env') or kwargs.setdefault('env', os.environ.copy())
     env.setdefault('GIT_ASKPASS', 'true')
     env.setdefault('SSH_ASKPASS', 'true')
-    self.print('running "git %s" in "%s"' % (' '.join(cmd), cwd))
+    self.print(f"""running "git {' '.join(cmd)}" in "{cwd}\"""")
     gclient_utils.CheckCallAndFilter([self.git_exe] + cmd, **kwargs)
 
   def config(self, cwd=None, reset_fetch_config=False):
@@ -310,12 +307,10 @@ class Mirror(object):
       # create new temporary directory locally
       tempdir = tempfile.mkdtemp(prefix='_cache_tmp', dir=self.GetCachePath())
       self.RunGit(['init', '--bare'], cwd=tempdir)
-      self.print('Downloading files in %s/* into %s.' %
-                 (latest_dir, tempdir))
+      self.print(f'Downloading files in {latest_dir}/* into {tempdir}.')
       with self.print_duration_of('download'):
         with GSUTIL_CP_SEMAPHORE:
-          code = gsutil.call('-m', 'cp', '-r', latest_dir + "/*",
-                             tempdir)
+          code = gsutil.call('-m', 'cp', '-r', f"{latest_dir}/*", tempdir)
       if code:
         return False
       # Set HEAD to main.
@@ -323,7 +318,7 @@ class Mirror(object):
       # A quick validation that all references are valid.
       self.RunGit(['for-each-ref'], print_stdout=False, cwd=tempdir)
     except Exception as e:
-      self.print('Encountered error: %s' % str(e), file=sys.stderr)
+      self.print(f'Encountered error: {str(e)}', file=sys.stderr)
       gclient_utils.rmtree(tempdir)
       return False
     # delete the old directory
@@ -348,7 +343,7 @@ class Mirror(object):
       self.RunGit(['cat-file', '-e', needle])
       return True
     except subprocess.CalledProcessError:
-      self.print('Commit with hash "%s" not found' % revision, file=sys.stderr)
+      self.print(f'Commit with hash "{revision}" not found', file=sys.stderr)
       return False
 
   def exists(self):
@@ -390,10 +385,8 @@ class Mirror(object):
       self.print('%s has %d .pack files, re-bootstrapping if >%d or ==0' %
                 (self.mirror_path, len(pack_files), GC_AUTOPACKLIMIT))
 
-    should_bootstrap = (force or
-                        not self.exists() or
-                        len(pack_files) > GC_AUTOPACKLIMIT or
-                        len(pack_files) == 0)
+    should_bootstrap = (force or not self.exists()
+                        or len(pack_files) > GC_AUTOPACKLIMIT or not pack_files)
 
     if not should_bootstrap:
       if depth and os.path.exists(os.path.join(self.mirror_path, 'shallow')):
@@ -429,10 +422,11 @@ class Mirror(object):
                 cwd=self.mirror_path).decode('utf-8', 'ignore').strip()
         )
         default_branch_regexp = re.compile(r'HEAD branch: (.*)$')
-        m = default_branch_regexp.search(remote_info, re.MULTILINE)
-        if m:
-          self.RunGit(['symbolic-ref', 'HEAD', 'refs/heads/' + m.groups()[0]],
-                      cwd=self.mirror_path)
+        if m := default_branch_regexp.search(remote_info, re.MULTILINE):
+          self.RunGit(
+              ['symbolic-ref', 'HEAD', f'refs/heads/{m.groups()[0]}'],
+              cwd=self.mirror_path,
+          )
       else:
         # Bootstrap failed, previous cache exists; warn and continue.
         logging.warning(
@@ -465,20 +459,20 @@ class Mirror(object):
         cwd=rundir).decode('utf-8', 'ignore').strip().splitlines()
     for spec in fetch_specs:
       try:
-        self.print('Fetching %s' % spec)
-        with self.print_duration_of('fetch %s' % spec):
+        self.print(f'Fetching {spec}')
+        with self.print_duration_of(f'fetch {spec}'):
           self.RunGit(fetch_cmd + [spec], cwd=rundir, retry=True)
       except subprocess.CalledProcessError:
         if spec == '+refs/heads/*:refs/heads/*':
           raise ClobberNeeded()  # Corrupted cache.
-        logging.warning('Fetch of %s failed' % spec)
+        logging.warning(f'Fetch of {spec} failed')
     for commit in self.fetch_commits:
-      self.print('Fetching %s' % commit)
+      self.print(f'Fetching {commit}')
       try:
-        with self.print_duration_of('fetch %s' % commit):
+        with self.print_duration_of(f'fetch {commit}'):
           self.RunGit(['fetch', 'origin', commit], cwd=rundir, retry=True)
       except subprocess.CalledProcessError:
-        logging.warning('Fetch of %s failed' % commit)
+        logging.warning(f'Fetch of {commit} failed')
 
   def populate(self,
                depth=None,
@@ -520,7 +514,7 @@ class Mirror(object):
     recursed_dir = os.path.join(self.mirror_path,
                                 self.mirror_path.split(os.path.sep)[-1])
     if os.path.exists(recursed_dir):
-      self.print('Deleting unexpected directory: %s' % recursed_dir)
+      self.print(f'Deleting unexpected directory: {recursed_dir}')
       gclient_utils.rmtree(recursed_dir)
 
     # The folder is <git number>
@@ -529,10 +523,10 @@ class Mirror(object):
         cwd=self.mirror_path).decode('utf-8', 'ignore').strip()
     gsutil = Gsutil(path=self.gsutil_exe, boto_path=None)
 
-    dest_prefix = '%s/%s' % (self._gs_path, gen_number)
+    dest_prefix = f'{self._gs_path}/{gen_number}'
 
     # ls_out lists contents in the format: gs://blah/blah/123...
-    self.print('running "gsutil ls %s":' % self._gs_path)
+    self.print(f'running "gsutil ls {self._gs_path}":')
     ls_code, ls_out, ls_error = gsutil.check_call_with_retries(
         'ls', self._gs_path)
     if ls_code != 0:
@@ -542,9 +536,8 @@ class Mirror(object):
 
     # Check to see if folder already exists in gs
     ls_out_set = set(ls_out.strip().splitlines())
-    if (dest_prefix + '/' in ls_out_set and
-        dest_prefix + '.ready' in ls_out_set):
-      print('Cache %s already exists.' % dest_prefix)
+    if f'{dest_prefix}/' in ls_out_set and f'{dest_prefix}.ready' in ls_out_set:
+      print(f'Cache {dest_prefix} already exists.')
       return
 
     # Reduce the number of individual files to download & write on disk.
@@ -564,30 +557,33 @@ class Mirror(object):
       self.RunGit(['reflog', 'expire', '--all'])
 
       # These are the default repack settings for 'gc --aggressive'.
-      gc_args = ['repack', '-d', '-l', '-f', '--depth=50', '--window=250', '-A',
-                 '--unpack-unreachable=all']
-      # A 1G memory limit seems to provide comparable pack results as the
-      # default, even for our largest repos, while preventing runaway memory (at
-      # least on current Chromium builders which have about 4G RAM per core).
-      gc_args.append('--window-memory=1g')
-      # NOTE: It might also be possible to avoid thrashing with a larger window
-      # (e.g. "--window-memory=2g") by limiting the number of threads created
-      # (e.g. "--threads=[cores/2]"). Some limited testing didn't show much
-      # difference in outcomes on our current repos, but it might be worth
-      # trying if the repos grow much larger and the packs don't seem to be
-      # getting compressed enough.
+      gc_args = [
+          'repack',
+          '-d',
+          '-l',
+          '-f',
+          '--depth=50',
+          '--window=250',
+          '-A',
+          '--unpack-unreachable=all',
+          '--window-memory=1g',
+      ]
+        # NOTE: It might also be possible to avoid thrashing with a larger window
+        # (e.g. "--window-memory=2g") by limiting the number of threads created
+        # (e.g. "--threads=[cores/2]"). Some limited testing didn't show much
+        # difference in outcomes on our current repos, but it might be worth
+        # trying if the repos grow much larger and the packs don't seem to be
+        # getting compressed enough.
     self.RunGit(gc_args)
 
-    self.print('running "gsutil -m rsync -r -d %s %s"' %
-               (self.mirror_path, dest_prefix))
+    self.print(f'running "gsutil -m rsync -r -d {self.mirror_path} {dest_prefix}"')
     gsutil.call('-m', 'rsync', '-r', '-d', self.mirror_path, dest_prefix)
 
     # Create .ready file and upload
     _, ready_file_name =  tempfile.mkstemp(suffix='.ready')
     try:
-      self.print('running "gsutil cp %s %s.ready"' %
-                 (ready_file_name, dest_prefix))
-      gsutil.call('cp', ready_file_name, '%s.ready' % (dest_prefix))
+      self.print(f'running "gsutil cp {ready_file_name} {dest_prefix}.ready"')
+      gsutil.call('cp', ready_file_name, f'{dest_prefix}.ready')
     finally:
       os.remove(ready_file_name)
 
@@ -601,7 +597,7 @@ class Mirror(object):
     if not prev_dest_prefix:
       return
     for path in ls_out_set:
-      if path in (prev_dest_prefix + '/', prev_dest_prefix + '.ready'):
+      if path in (f'{prev_dest_prefix}/', f'{prev_dest_prefix}.ready'):
         continue
       if path.endswith('.ready'):
         gsutil.call('rm', path)
@@ -620,9 +616,9 @@ class Mirror(object):
       f = os.path.join(pack_dir, f)
       try:
         os.remove(f)
-        logging.warning('Deleted stale temporary pack file %s' % f)
+        logging.warning(f'Deleted stale temporary pack file {f}')
       except OSError:
-        logging.warning('Unable to delete temporary pack file %s' % f)
+        logging.warning(f'Unable to delete temporary pack file {f}')
 
 
 @subcommand.usage('[url of repo to check for caching]')
@@ -630,7 +626,7 @@ class Mirror(object):
 def CMDexists(parser, args):
   """Check to see if there already is a cache of the given repo."""
   _, args = parser.parse_args(args)
-  if not len(args) == 1:
+  if len(args) != 1:
     parser.error('git cache exists only takes exactly one repo url.')
   url = args[0]
   mirror = Mirror(url)
@@ -706,7 +702,7 @@ def CMDpopulate(parser, args):
                     help='Reset the fetch config before populating the cache.')
 
   options, args = parser.parse_args(args)
-  if not len(args) == 1:
+  if len(args) != 1:
     parser.error('git cache populate only takes exactly one repo url.')
   if options.ignore_locks:
     print('ignore_locks is no longer used. Please remove its usage.')
@@ -760,7 +756,7 @@ def CMDfetch(parser, args):
     current_branch = current_branch.decode('utf-8', 'ignore').strip()
     if current_branch != 'HEAD':
       upstream = subprocess.check_output(
-          [Mirror.git_exe, 'config', 'branch.%s.remote' % current_branch])
+          [Mirror.git_exe, 'config', f'branch.{current_branch}.remote'])
       upstream = upstream.decode('utf-8', 'ignore').strip()
       if upstream and upstream != '.':
         remotes = [upstream]
@@ -780,7 +776,7 @@ def CMDfetch(parser, args):
     return 0
   for remote in remotes:
     remote_url = subprocess.check_output(
-        [Mirror.git_exe, 'config', 'remote.%s.url' % remote])
+        [Mirror.git_exe, 'config', f'remote.{remote}.url'])
     remote_url = remote_url.decode('utf-8', 'ignore').strip()
     if remote_url.startswith(cachepath):
       mirror = Mirror.FromPath(remote_url)

@@ -17,7 +17,7 @@ import git_common as git
 
 FOOTER_PATTERN = re.compile(r'^\s*([\w-]+): *(.*)$')
 CHROME_COMMIT_POSITION_PATTERN = re.compile(r'^([\w/\-\.]+)@{#(\d+)}$')
-FOOTER_KEY_BLOCKLIST = set(['http', 'https'])
+FOOTER_KEY_BLOCKLIST = {'http', 'https'}
 
 
 def normalize_name(header):
@@ -50,9 +50,7 @@ def matches_footer_key(line, key):
   Keys are compared in normalized form.
   """
   r = parse_footer(line)
-  if r is None:
-    return False
-  return normalize_name(r[0]) == normalize_name(key)
+  return False if r is None else normalize_name(r[0]) == normalize_name(key)
 
 
 def split_footers(message):
@@ -87,14 +85,14 @@ def split_footers(message):
     footer_lines = []
 
   footer_lines.reverse()
-  footers = [footer for footer in map(parse_footer, footer_lines) if footer]
-  if not footers:
+  if footers := [
+      footer for footer in map(parse_footer, footer_lines) if footer
+  ]:
+    return ((message_lines[:-len(footer_lines)] + [''], footer_lines,
+             footers) if maybe_footer_lines else
+            (message_lines[:-len(footer_lines)], footer_lines, footers))
+  else:
     return message_lines, [], []
-  if maybe_footer_lines:
-    # If some malformed lines were left over, add a newline to split them
-    # from the well-formed ones.
-    return message_lines[:-len(footer_lines)] + [''], footer_lines, footers
-  return message_lines[:-len(footer_lines)], footer_lines, footers
 
 
 def get_footer_change_id(message):
@@ -130,7 +128,7 @@ def add_footer(message, key, value, after_keys=None, before_keys=None):
   the new footer will be inserted between Bug and Verified-By existing footers.
   """
   assert key == normalize_name(key), 'Use normalized key'
-  new_footer = '%s: %s' % (key, value)
+  new_footer = f'{key}: {value}'
   if not FOOTER_PATTERN.match(new_footer):
     raise ValueError('Invalid footer %r' % new_footer)
 
@@ -180,11 +178,8 @@ def remove_footer(message, key):
 def get_unique(footers, key):
   key = normalize_name(key)
   values = footers[key]
-  assert len(values) <= 1, 'Multiple %s footers' % key
-  if values:
-    return values[0]
-
-  return None
+  assert len(values) <= 1, f'Multiple {key} footers'
+  return values[0] if values else None
 
 
 def get_position(footers):
@@ -198,10 +193,9 @@ def get_position(footers):
     would give the return value ('refs/heads/main', 292272).
   """
 
-  position = get_unique(footers, 'Cr-Commit-Position')
-  if position:
+  if position := get_unique(footers, 'Cr-Commit-Position'):
     match = CHROME_COMMIT_POSITION_PATTERN.match(position)
-    assert match, 'Invalid Cr-Commit-Position value: %s' % position
+    assert match, f'Invalid Cr-Commit-Position value: {position}'
     return (match.group(1), match.group(2))
 
   raise ValueError('Unable to infer commit position from footers')
@@ -250,7 +244,7 @@ def main(args):
   else:
     for k in footers.keys():
       for v in footers[k]:
-        print('%s: %s' % (k, v))
+        print(f'{k}: {v}')
   return 0
 
 

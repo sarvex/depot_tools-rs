@@ -223,9 +223,11 @@ def main():
       g.write(json.dumps(metadata).encode())
 
   resp = request.urlopen(
-      request.Request('https://' + args.server + '/upload_ninja_log/',
-                      data=output.getvalue(),
-                      headers={'Content-Encoding': 'gzip'}))
+      request.Request(
+          f'https://{args.server}/upload_ninja_log/',
+          data=output.getvalue(),
+          headers={'Content-Encoding': 'gzip'},
+      ))
 
   if resp.status != 200:
     logging.warning("unexpected status code for response: %s", resp.status)

@@ -33,7 +33,7 @@ class ConstantString(object):
     return self.value
 
   def __repr__(self):
-    return "Str('" + self.value + "')"
+    return f"Str('{self.value}')"
 
   def __eq__(self, other):
     if isinstance(other, ConstantString):
@@ -484,12 +484,9 @@ def UpdateCondition(info_dict, op, new_condition):
   curr_condition = info_dict.get('condition')
   # Easy case: Both are present.
   if curr_condition and new_condition:
-    info_dict['condition'] = '(%s) %s (%s)' % (
-        curr_condition, op, new_condition)
-  # If |op| == 'and', and at least one condition is present, then use it.
+    info_dict['condition'] = f'({curr_condition}) {op} ({new_condition})'
   elif op == 'and' and (curr_condition or new_condition):
     info_dict['condition'] = curr_condition or new_condition
-  # Otherwise, no condition should be set
   elif curr_condition:
     del info_dict['condition']
 
@@ -531,7 +528,7 @@ def Parse(content, filename, vars_override=None, builtin_vars=None):
     hooks = result.setdefault('hooks', [])
     for os_name, os_hooks in result['hooks_os'].items():
       for hook in os_hooks:
-        UpdateCondition(hook, 'and', 'checkout_' + os_name)
+        UpdateCondition(hook, 'and', f'checkout_{os_name}')
       hooks.extend(os_hooks)
     del result['hooks_os']
 
@@ -747,7 +744,7 @@ def SetVar(gclient_dict, var_name, value):
   node = gclient_dict['vars'].GetNode(var_name)
   if node is None:
     raise ValueError(
-        "The vars entry for %s has no formatting information." % var_name)
+        f"The vars entry for {var_name} has no formatting information.")
 
   _UpdateAstString(tokens, node, value)
   gclient_dict['vars'].SetNode(var_name, value, node)
@@ -771,8 +768,7 @@ def SetCIPD(gclient_dict, dep_name, package_name, new_version):
   tokens = gclient_dict.tokens
 
   if 'deps' not in gclient_dict or dep_name not in gclient_dict['deps']:
-    raise KeyError(
-        "Could not find any dependency called %s." % dep_name)
+    raise KeyError(f"Could not find any dependency called {dep_name}.")
 
   # Find the package with the given name
   packages = [
@@ -789,8 +785,8 @@ def SetCIPD(gclient_dict, dep_name, package_name, new_version):
   node = packages[0].GetNode('version')
   if node is None:
     raise ValueError(
-        "The deps entry for %s:%s has no formatting information." %
-        (dep_name, package_name))
+        f"The deps entry for {dep_name}:{package_name} has no formatting information."
+    )
 
   if not isinstance(node, ast.Call) and not isinstance(node, ast.Str):
     raise ValueError(
@@ -810,7 +806,7 @@ def SetRevision(gclient_dict, dep_name, new_revision):
     dep_node = dep_dict.GetNode(dep_key)
     if dep_node is None:
       raise ValueError(
-          "The deps entry for %s has no formatting information." % dep_name)
+          f"The deps entry for {dep_name} has no formatting information.")
 
     node = dep_node
     if isinstance(node, ast.BinOp):
@@ -841,7 +837,7 @@ def SetRevision(gclient_dict, dep_name, new_revision):
       elif '@' not in dep_dict[dep_key]:
         # '@' is not part of the URL at all. This mean the dependency is
         # unpinned and we should pin it.
-        new_revision = node.s + '@' + new_revision
+        new_revision = f'{node.s}@{new_revision}'
       _UpdateAstString(tokens, node, new_revision)
       dep_dict.SetNode(dep_key, new_revision, node)
 
@@ -852,8 +848,7 @@ def SetRevision(gclient_dict, dep_name, new_revision):
   tokens = gclient_dict.tokens
 
   if 'deps' not in gclient_dict or dep_name not in gclient_dict['deps']:
-    raise KeyError(
-        "Could not find any dependency called %s." % dep_name)
+    raise KeyError(f"Could not find any dependency called {dep_name}.")
 
   if isinstance(gclient_dict['deps'][dep_name], _NodeDict):
     _UpdateRevision(gclient_dict['deps'][dep_name], 'url', new_revision)
@@ -863,19 +858,15 @@ def SetRevision(gclient_dict, dep_name, new_revision):
 
 def GetVar(gclient_dict, var_name):
   if 'vars' not in gclient_dict or var_name not in gclient_dict['vars']:
-    raise KeyError(
-        "Could not find any variable called %s." % var_name)
+    raise KeyError(f"Could not find any variable called {var_name}.")
 
   val = gclient_dict['vars'][var_name]
-  if isinstance(val, ConstantString):
-    return val.value
-  return val
+  return val.value if isinstance(val, ConstantString) else val
 
 
 def GetCIPD(gclient_dict, dep_name, package_name):
   if 'deps' not in gclient_dict or dep_name not in gclient_dict['deps']:
-    raise KeyError(
-        "Could not find any dependency called %s." % dep_name)
+    raise KeyError(f"Could not find any dependency called {dep_name}.")
 
   # Find the package with the given name
   packages = [
@@ -893,8 +884,7 @@ def GetCIPD(gclient_dict, dep_name, package_name):
 
 def GetRevision(gclient_dict, dep_name):
   if 'deps' not in gclient_dict or dep_name not in gclient_dict['deps']:
-    raise KeyError(
-        "Could not find any dependency called %s." % dep_name)
+    raise KeyError(f"Could not find any dependency called {dep_name}.")
 
   dep = gclient_dict['deps'][dep_name]
   if dep is None:
@@ -908,5 +898,4 @@ def GetRevision(gclient_dict, dep_name):
     _, _, revision = dep['url'].partition('@')
     return revision or None
 
-  raise ValueError(
-      '%s is not a valid git dependency.' % dep_name)
+  raise ValueError(f'{dep_name} is not a valid git dependency.')

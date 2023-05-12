@@ -66,10 +66,9 @@ class DiffFiltererWrapper(object):
     if (line.startswith(self.index_string)):
       self.SetCurrentFile(line[len(self.index_string):])
       line = self._Replace(line)
-    else:
-      if (line.startswith(self.original_prefix) or
+    elif (line.startswith(self.original_prefix) or
           line.startswith(self.working_prefix)):
-        line = self._Replace(line)
+      line = self._Replace(line)
     self._print_func(line)
 
 
@@ -81,7 +80,7 @@ class GitDiffFilterer(DiffFiltererWrapper):
     self._current_file = current_file[:(len(current_file)/2)][2:]
 
   def _Replace(self, line):
-    return re.sub("[a|b]/" + self._current_file, self._replacement_file, line)
+    return re.sub(f"[a|b]/{self._current_file}", self._replacement_file, line)
 
 
 # SCMWrapper base class
@@ -111,19 +110,20 @@ class SCMWrapper(object):
   def Print(self, *args, **kwargs):
     kwargs.setdefault('file', self.out_fh)
     if kwargs.pop('timestamp', True):
-      self.out_fh.write('[%s] ' % gclient_utils.Elapsed())
+      self.out_fh.write(f'[{gclient_utils.Elapsed()}] ')
     print(*args, **kwargs)
 
   def RunCommand(self, command, options, args, file_list=None):
     commands = ['update', 'updatesingle', 'revert',
                 'revinfo', 'status', 'diff', 'pack', 'runhooks']
 
-    if not command in commands:
-      raise gclient_utils.Error('Unknown command %s' % command)
+    if command not in commands:
+      raise gclient_utils.Error(f'Unknown command {command}')
 
-    if not command in dir(self):
-      raise gclient_utils.Error('Command %s not implemented in %s wrapper' % (
-          command, self.__class__.__name__))
+    if command not in dir(self):
+      raise gclient_utils.Error(
+          f'Command {command} not implemented in {self.__class__.__name__} wrapper'
+      )
 
     return getattr(self, command)(options, args, file_list)
 
@@ -162,8 +162,7 @@ class SCMWrapper(object):
       # A checkout which doesn't exist can't be broken.
       return True
 
-    actual_remote_url = self.GetActualRemoteURL(options)
-    if actual_remote_url:
+    if actual_remote_url := self.GetActualRemoteURL(options):
       return (gclient_utils.SplitUrlRevision(actual_remote_url)[0].rstrip('/')
               == gclient_utils.SplitUrlRevision(self.url)[0].rstrip('/'))
 
@@ -178,10 +177,11 @@ class SCMWrapper(object):
         force: bool; if True, delete the directory. Otherwise, just move it.
     """
     if force and os.environ.get('CHROME_HEADLESS') == '1':
-      self.Print('_____ Conflicting directory found in %s. Removing.'
-                 % self.checkout_path)
-      gclient_utils.AddWarning('Conflicting directory %s deleted.'
-                               % self.checkout_path)
+      self.Print(
+          f'_____ Conflicting directory found in {self.checkout_path}. Removing.'
+      )
+      gclient_utils.AddWarning(
+          f'Conflicting directory {self.checkout_path} deleted.')
       gclient_utils.rmtree(self.checkout_path)
     else:
       bad_scm_dir = os.path.join(self._root_dir, '_bad_scm',
@@ -196,10 +196,11 @@ class SCMWrapper(object):
       dest_path = tempfile.mkdtemp(
           prefix=os.path.basename(self.relpath),
           dir=bad_scm_dir)
-      self.Print('_____ Conflicting directory found in %s. Moving to %s.'
-                 % (self.checkout_path, dest_path))
-      gclient_utils.AddWarning('Conflicting directory %s moved to %s.'
-                               % (self.checkout_path, dest_path))
+      self.Print(
+          f'_____ Conflicting directory found in {self.checkout_path}. Moving to {dest_path}.'
+      )
+      gclient_utils.AddWarning(
+          f'Conflicting directory {self.checkout_path} moved to {dest_path}.')
       shutil.move(self.checkout_path, dest_path)
 
 
@@ -259,7 +260,7 @@ class GitWrapper(SCMWrapper):
   def diff(self, options, _args, _file_list):
     _, revision = gclient_utils.SplitUrlRevision(self.url)
     if not revision:
-      revision = 'refs/remotes/%s/main' % self.remote
+      revision = f'refs/remotes/{self.remote}/main'
     self._Run(['-c', 'core.quotePath=false', 'diff', revision], options)
 
   def pack(self, _options, _args, _file_list):
@@ -280,9 +281,7 @@ class GitWrapper(SCMWrapper):
 
   def _Scrub(self, target, options):
     """Scrubs out all changes in the local repo, back to the state of target."""
-    quiet = []
-    if not options.verbose:
-      quiet = ['--quiet']
+    quiet = ['--quiet'] if not options.verbose else []
     self._Run(['reset', '--hard', target] + quiet, options)
     if options.force and options.delete_unversioned_trees:
       # where `target` is a commit that contains both upper and lower case
@@ -295,13 +294,11 @@ class GitWrapper(SCMWrapper):
       for line in output.splitlines():
         # --porcelain (v1) looks like:
         # XY filename
-        try:
+        with contextlib.suppress(OSError):
           filename = line[3:]
           self.Print('_____ Deleting residual after reset: %r.' % filename)
           gclient_utils.rm_file_or_tree(
             os.path.join(self.checkout_path, filename))
-        except OSError:
-          pass
 
   def _FetchAndReset(self, revision, file_list, options):
     """Equivalent to git fetch; git reset."""
@@ -321,7 +318,7 @@ class GitWrapper(SCMWrapper):
       return
     for f in os.listdir(hook_dir):
       if not f.endswith('.sample') and not f.endswith('.disabled'):
-        disabled_hook_path = os.path.join(hook_dir, f + '.disabled')
+        disabled_hook_path = os.path.join(hook_dir, f'{f}.disabled')
         if os.path.exists(disabled_hook_path):
           os.remove(disabled_hook_path)
         os.rename(os.path.join(hook_dir, f), disabled_hook_path)
@@ -333,18 +330,19 @@ class GitWrapper(SCMWrapper):
     In particular, this will cleanup index.lock files, as well as ref lock
     files.
     """
-    if options.break_repo_locks:
-      git_dir = os.path.join(self.checkout_path, '.git')
-      for path, _, filenames in os.walk(git_dir):
-        for filename in filenames:
-          if filename.endswith('.lock'):
-            to_break = os.path.join(path, filename)
-            self.Print('breaking lock: %s' % (to_break,))
-            try:
-              os.remove(to_break)
-            except OSError as ex:
-              self.Print('FAILED to break lock: %s: %s' % (to_break, ex))
-              raise
+    if not options.break_repo_locks:
+      return
+    git_dir = os.path.join(self.checkout_path, '.git')
+    for path, _, filenames in os.walk(git_dir):
+      for filename in filenames:
+        if filename.endswith('.lock'):
+          to_break = os.path.join(path, filename)
+          self.Print(f'breaking lock: {to_break}')
+          try:
+            os.remove(to_break)
+          except OSError as ex:
+            self.Print(f'FAILED to break lock: {to_break}: {ex}')
+            raise
 
   def _download_topics(self, patch_rev, googlesource_url):
     """This method returns new patch_revs to process that have the same topic.
@@ -369,7 +367,7 @@ class GitWrapper(SCMWrapper):
 
     # parse the gerrit host and repo out of googlesource_url.
     host, repo = tokens.groups()[:2]
-    gerrit_host_url = '%s-review.googlesource.com' % host
+    gerrit_host_url = f'{host}-review.googlesource.com'
 
     # 1. Find the topic of the Gerrit change specified in the patch_rev.
     change_object = gerrit_util.GetChange(gerrit_host_url, change)
@@ -437,11 +435,8 @@ class GitWrapper(SCMWrapper):
     """
 
     # Abort any cherry-picks in progress.
-    try:
+    with contextlib.suppress(subprocess2.CalledProcessError):
       self._Capture(['cherry-pick', '--abort'])
-    except subprocess2.CalledProcessError:
-      pass
-
     base_rev = self.revinfo(None, None, None)
 
     if not target_rev:
@@ -463,8 +458,7 @@ class GitWrapper(SCMWrapper):
     elif not scm.GIT.IsValidRevision(self.checkout_path, target_rev):
       # Fetch |target_rev| if it's not already available.
       url, _ = gclient_utils.SplitUrlRevision(self.url)
-      mirror = self._GetMirror(url, options, target_rev, target_rev)
-      if mirror:
+      if mirror := self._GetMirror(url, options, target_rev, target_rev):
         rev_type = 'branch' if target_rev.startswith('refs/') else 'hash'
         self._UpdateMirrorIfNotContains(mirror, options, rev_type, target_rev)
       self._Fetch(options, refspec=target_rev)
@@ -490,7 +484,7 @@ class GitWrapper(SCMWrapper):
         # This will allow us to correctly extend `file_list`, and will show the
         # correct file-list to programs which do `git diff --cached` expecting
         # to see the patch diff.
-        base_rev = self._Capture(['rev-parse', pr+'~'])
+        base_rev = self._Capture(['rev-parse', f'{pr}~'])
       else:
         self.Print('Will cherrypick %r .. %r on top of %r.' % (
             target_rev, pr, base_rev))
@@ -511,8 +505,11 @@ class GitWrapper(SCMWrapper):
             # be redundant, since it has already landed and its changes
             # incorporated in the tree.
             # We pass '--keep-redundant-commits' to ignore those changes.
-            self._Capture(['cherry-pick', target_rev + '..' + pr,
-                           '--keep-redundant-commits'])
+            self._Capture([
+                'cherry-pick',
+                f'{target_rev}..{pr}',
+                '--keep-redundant-commits',
+            ])
 
         except subprocess2.CalledProcessError as e:
           self.Print('Failed to apply patch.')
@@ -526,10 +523,8 @@ class GitWrapper(SCMWrapper):
           # the patch failure, since git cherry-pick doesn't show that
           # information.
           self.Print(self._Capture(['status']))
-          try:
+          with contextlib.suppress(subprocess2.CalledProcessError):
             self._Capture(['cherry-pick', '--abort'])
-          except subprocess2.CalledProcessError:
-            pass
           raise
 
       if file_list is not None:

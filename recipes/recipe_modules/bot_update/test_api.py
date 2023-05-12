@@ -41,14 +41,11 @@ class BotUpdateTestApi(recipe_test_api.RecipeTestApi):
         revision = fixed_revisions.get(project_name, 'HEAD')
         if revision.startswith('origin/'):
           return revision.replace('origin/', 'refs/heads/', 1)
-        if revision.startswith('refs/'):
-          return revision
-        return 'refs/heads/main'
+        return revision if revision.startswith('refs/') else 'refs/heads/main'
 
       properties.update({
-          '%s_cp' % property_name:
-          ('%s@{#%s}' %
-           (get_ref(project_name), self.gen_commit_position(project_name)))
+          f'{property_name}_cp': '%s@{#%s}' %
+          (get_ref(project_name), self.gen_commit_position(project_name))
           for property_name, project_name in revision_mapping.items()
       })
 
@@ -59,30 +56,26 @@ class BotUpdateTestApi(recipe_test_api.RecipeTestApi):
         'step_text': 'Some step text'
     })
 
-    output.update({
-        'manifest': {
+    output['manifest'] = {
+        project_name: {
+            'repository': f'https://fake.org/{project_name}.git',
+            'revision': revision,
+        }
+        for project_name, revision in revisions.items()
+    }
+
+    output['source_manifest'] = {
+        'version': 0,
+        'directories': {
             project_name: {
-                'repository': 'https://fake.org/%s.git' % project_name,
-                'revision': revision,
+                'git_checkout': {
+                    'repo_url': f'https://fake.org/{project_name}.git',
+                    'revision': revision,
+                }
             }
             for project_name, revision in revisions.items()
-        }
-    })
-
-    output.update({
-        'source_manifest': {
-            'version': 0,
-            'directories': {
-                project_name: {
-                    'git_checkout': {
-                        'repo_url': 'https://fake.org/%s.git' % project_name,
-                        'revision': revision
-                    }
-                }
-                for project_name, revision in revisions.items()
-            }
-        }
-    })
+        },
+    }
 
     if fixed_revisions:
       output['fixed_revisions'] = fixed_revisions

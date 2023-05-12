@@ -27,8 +27,11 @@ def main(args):
   g = parser.add_mutually_exclusive_group()
   g.add_argument('new_parent', nargs='?',
                  help='New parent branch (or tag) to reparent to.')
-  g.add_argument('--root', action='store_true',
-                 help='Reparent to the configured root branch (%s).' % root_ref)
+  g.add_argument(
+      '--root',
+      action='store_true',
+      help=f'Reparent to the configured root branch ({root_ref}).',
+  )
   g.add_argument('--lkgr', action='store_true',
                  help='Reparent to the lkgr tag.')
   opts = parser.parse_args(args)
@@ -71,17 +74,15 @@ def main(args):
   try:
     run('show-ref', new_parent)
   except subprocess2.CalledProcessError:
-    print('fatal: invalid reference: %s' % new_parent, file=sys.stderr)
+    print(f'fatal: invalid reference: {new_parent}', file=sys.stderr)
     return 1
 
   if new_parent in all_tags:
-    print("Reparenting %s to track %s [tag] (was %s)" % (branch, new_parent,
-                                                         cur_parent))
+    print(f"Reparenting {branch} to track {new_parent} [tag] (was {cur_parent})")
     set_branch_config(branch, 'remote', '.')
     set_branch_config(branch, 'merge', new_parent)
   else:
-    print("Reparenting %s to track %s (was %s)" % (branch, new_parent,
-                                                   cur_parent))
+    print(f"Reparenting {branch} to track {new_parent} (was {cur_parent})")
     run('branch', '--set-upstream-to', new_parent, branch)
 
   manual_merge_base(branch, mbase, new_parent)

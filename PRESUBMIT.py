@@ -153,14 +153,17 @@ def CheckCIPDManifest(input_api, output_api):
   root = input_api.os_path.normpath(
     input_api.os_path.abspath(input_api.PresubmitLocalPath()))
   rel_file = lambda rel: input_api.os_path.join(root, rel)
-  cipd_manifests = set(rel_file(input_api.os_path.join(*x)) for x in (
-    ('cipd_manifest.txt',),
-    ('bootstrap', 'manifest.txt'),
-    ('bootstrap', 'manifest_bleeding_edge.txt'),
-
-    # Also generate a file for the cipd client itself.
-    ('cipd_client_version',),
-  ))
+  cipd_manifests = {
+      rel_file(input_api.os_path.join(*x))
+      for x in (
+          ('cipd_manifest.txt', ),
+          ('bootstrap', 'manifest.txt'),
+          ('bootstrap', 'manifest_bleeding_edge.txt'),
+          # Also generate a file for the cipd client itself.
+          (
+              'cipd_client_version', ),
+      )
+  }
   affected_manifests = input_api.AffectedFiles(
     include_deletes=False,
     file_filter=lambda x:
@@ -174,12 +177,15 @@ def CheckCIPDManifest(input_api, output_api):
     else:
       pkg = 'infra/tools/cipd/${platform}'
       ver = input_api.ReadFile(path)
-      tests.append(input_api.canned_checks.CheckCIPDManifest(
-          input_api, output_api,
-          content=CIPD_CLIENT_ENSURE_FILE_TEMPLATE % (pkg, ver)))
-      tests.append(input_api.canned_checks.CheckCIPDClientDigests(
-          input_api, output_api, client_version_file=path))
-
+      tests.extend((
+          input_api.canned_checks.CheckCIPDManifest(
+              input_api,
+              output_api,
+              content=CIPD_CLIENT_ENSURE_FILE_TEMPLATE % (pkg, ver),
+          ),
+          input_api.canned_checks.CheckCIPDClientDigests(
+              input_api, output_api, client_version_file=path),
+      ))
   return input_api.RunTests(tests)
 
 

@@ -72,7 +72,7 @@ FREEZE_SECTIONS = {
   'indexed': 'soft',
   'unindexed': 'mixed'
 }
-FREEZE_MATCHER = re.compile(r'%s.(%s)' % (FREEZE, '|'.join(FREEZE_SECTIONS)))
+FREEZE_MATCHER = re.compile(f"{FREEZE}.({'|'.join(FREEZE_SECTIONS)})")
 
 
 # NOTE: This list is DEPRECATED in favor of the Infra Git wrapper:
@@ -145,8 +145,7 @@ MIN_UPSTREAM_TRACK_GIT_VERSION = (2, 3)
 
 class BadCommitRefException(Exception):
   def __init__(self, refs):
-    msg = ('one of %s does not seem to be a valid commitref.' %
-           str(refs))
+    msg = f'one of {str(refs)} does not seem to be a valid commitref.'
     super(BadCommitRefException, self).__init__(msg)
 
 
@@ -348,7 +347,7 @@ def blame(filename, revision=None, porcelain=False, abbrev=None, *_args):
 
 
 def branch_config(branch, option, default=None):
-  return get_config('branch.%s.%s' % (branch, option), default=default)
+  return get_config(f'branch.{branch}.{option}', default=default)
 
 
 def branch_config_map(option):
@@ -356,7 +355,7 @@ def branch_config_map(option):
   try:
     reg = re.compile(r'^branch\.(.*)\.%s$' % option)
     lines = get_config_regexp(reg.pattern)
-    return {reg.match(k).group(1): v for k, v in (l.split() for l in lines)}
+    return {reg.match(k)[1]: v for k, v in (l.split() for l in lines)}
   except subprocess2.CalledProcessError:
     return {}
 
@@ -427,14 +426,12 @@ def current_branch():
 
 
 def del_branch_config(branch, option, scope='local'):
-  del_config('branch.%s.%s' % (branch, option), scope=scope)
+  del_config(f'branch.{branch}.{option}', scope=scope)
 
 
 def del_config(option, scope='local'):
-  try:
-    run('config', '--' + scope, '--unset', option)
-  except subprocess2.CalledProcessError:
-    pass
+  with contextlib.suppress(subprocess2.CalledProcessError):
+    run('config', f'--{scope}', '--unset', option)
 
 
 def diff(oldrev, newrev, *args):
@@ -453,9 +450,8 @@ def freeze():
   for f, s in status():
     if is_unmerged(s):
       die("Cannot freeze unmerged changes!")
-    if limit_mb > 0:
-      if s.lstat == '?':
-        untracked_bytes += os.lstat(os.path.join(root_path, f)).st_size
+    if limit_mb > 0 and s.lstat == '?':
+      untracked_bytes += os.lstat(os.path.join(root_path, f)).st_size
   if limit_mb > 0 and untracked_bytes > limit_mb * MB:
     die("""\
       You appear to have too much untracked+unignored data in your git
@@ -476,24 +472,18 @@ def freeze():
       Where <new_limit> is an integer threshold in megabytes.""",
       untracked_bytes / (MB * 1.0), limit_mb, key)
 
-  try:
-    run('commit', '--no-verify', '-m', FREEZE + '.indexed')
+  with contextlib.suppress(subprocess2.CalledProcessError):
+    run('commit', '--no-verify', '-m', f'{FREEZE}.indexed')
     took_action = True
-  except subprocess2.CalledProcessError:
-    pass
-
   add_errors = False
   try:
     run('add', '-A', '--ignore-errors')
   except subprocess2.CalledProcessError:
     add_errors = True
 
-  try:
-    run('commit', '--no-verify', '-m', FREEZE + '.unindexed')
+  with contextlib.suppress(subprocess2.CalledProcessError):
+    run('commit', '--no-verify', '-m', f'{FREEZE}.unindexed')
     took_action = True
-  except subprocess2.CalledProcessError:
-    pass
-
   ret = []
   if add_errors:
     ret.append('Failed to index some unindexed files.')
@@ -662,10 +652,7 @@ def rebase(parent, start, branch, abort=False, allow_gc=False):
               rebase.
   """
   try:
-    args = [
-      '-c', 'gc.auto={}'.format('1' if allow_gc else '0'),
-      'rebase',
-    ]
+    args = ['-c', f"gc.auto={'1' if allow_gc else '0'}", 'rebase']
     if TEST_MODE:
       args.append('--committer-date-is-author-date')
     args += [
@@ -696,12 +683,10 @@ def upstream_default():
     ret = run('rev-parse', '--abbrev-ref', 'origin/HEAD')
     # Detect if the repository migrated to main branch
     if ret == 'origin/master':
-      try:
+      with contextlib.suppress(subprocess2.CalledProcessError):
         ret = run('rev-parse', '--abbrev-ref', 'origin/main')
         run('remote', 'set-head', '-a', 'origin')
         ret = run('rev-parse', '--abbrev-ref', 'origin/HEAD')
-      except subprocess2.CalledProcessError:
-        pass
     return ret
   except subprocess2.CalledProcessError:
     return 'origin/main'
@@ -735,11 +720,8 @@ def less():  # pragma: no cover
     proc = subprocess2.Popen(cmd, stdin=subprocess2.PIPE)
     yield proc.stdin
   finally:
-    try:
+    with contextlib.suppress(BrokenPipeError):
       proc.stdin.close()
-    except BrokenPipeError:
-      # BrokenPipeError is raised if proc has already completed,
-      pass
     proc.wait()
 
 
@@ -829,11 +811,11 @@ def run_with_stderr(*cmd, **kwargs):
 
 
 def set_branch_config(branch, option, value, scope='local'):
-  set_config('branch.%s.%s' % (branch, option), value, scope=scope)
+  set_config(f'branch.{branch}.{option}', value, scope=scope)
 
 
 def set_config(option, value, scope='local'):
-  run('config', '--' + scope, option, value)
+  run('config', f'--{scope}', option, value)
 
 
 def get_dirty_files():
@@ -845,10 +827,9 @@ def get_dirty_files():
 def is_dirty_git_tree(cmd):
   w = lambda s: sys.stderr.write(s+"\n")
 
-  dirty = get_dirty_files()
-  if dirty:
-    w('Cannot %s with a dirty tree. Commit%s or stash your changes first.' %
-      (cmd, '' if cmd == 'upload' else ', freeze'))
+  if dirty := get_dirty_files():
+    w(f"Cannot {cmd} with a dirty tree. Commit{'' if cmd == 'upload' else ', freeze'} or stash your changes first."
+      )
     w('Uncommitted files: (git diff-index --name-status HEAD)')
     w(dirty[:4096])
     if len(dirty) > 4096: # pragma: no cover
@@ -889,22 +870,19 @@ def status():
         return
       stat, dest = status_dest[:2], status_dest[3:]
       lstat, rstat = stat
-      if lstat == 'R':
-        src = next(tokens).decode('utf-8')
-      else:
-        src = dest
+      src = next(tokens).decode('utf-8') if lstat == 'R' else dest
       yield (dest, stat_entry(lstat, rstat, src))
 
   return parser(tokenizer(run_stream('status', '-z', bufsize=-1)))
 
 
 def squash_current_branch(header=None, merge_base=None):
-  header = header or 'git squash commit for %s.' % current_branch()
+  header = header or f'git squash commit for {current_branch()}.'
   merge_base = merge_base or get_or_create_merge_base(current_branch())
   log_msg = header + '\n'
   if log_msg:
     log_msg += '\n'
-  log_msg += run('log', '--reverse', '--format=%H%n%B', '%s..HEAD' % merge_base)
+  log_msg += run('log', '--reverse', '--format=%H%n%B', f'{merge_base}..HEAD')
   run('reset', '--soft', merge_base)
 
   if not get_dirty_files():
@@ -931,7 +909,7 @@ def thaw():
         return 'Nothing to thaw.'
       break
 
-    run('reset', '--' + FREEZE_SECTIONS[match.group(1)], sha)
+    run('reset', f'--{FREEZE_SECTIONS[match.group(1)]}', sha)
     took_action = True
 
 
@@ -1024,7 +1002,7 @@ def tree(treeref, recurse=False):
 
 def get_remote_url(remote='origin'):
   try:
-    return run('config', 'remote.%s.url' % remote)
+    return run('config', f'remote.{remote}.url')
   except subprocess2.CalledProcessError:
     return None
 
@@ -1065,13 +1043,12 @@ def get_branches_info(include_tracking_status):
 
     commits = None
     if include_tracking_status:
-      base = get_or_create_merge_base(branch)
-      if base:
-        commits_list = run('rev-list', '--count', branch, '^%s' % base, '--')
+      if base := get_or_create_merge_base(branch):
+        commits_list = run('rev-list', '--count', branch, f'^{base}', '--')
         commits = int(commits_list) or None
 
     behind_match = re.search(r'behind (\d+)', tracking_status)
-    behind = int(behind_match.group(1)) if behind_match else None
+    behind = int(behind_match[1]) if behind_match else None
 
     info_map[branch] = BranchesInfo(
         hash=branch_hash, upstream=upstream_branch, commits=commits,
@@ -1084,9 +1061,7 @@ def get_branches_info(include_tracking_status):
     if info.upstream not in info_map and info.upstream not in missing_upstreams:
       missing_upstreams[info.upstream] = None
 
-  result = info_map.copy()
-  result.update(missing_upstreams)
-  return result
+  return info_map | missing_upstreams
 
 
 def make_workdir_common(repository, new_workdir, files_to_symlink,

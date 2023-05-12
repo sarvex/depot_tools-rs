@@ -24,8 +24,7 @@ import clang_format
 
 def main():
   if len(sys.argv) < 5:
-    print('usage: %s <base> <current> <others> <path in the tree>' %
-          sys.argv[0])
+    print(f'usage: {sys.argv[0]} <base> <current> <others> <path in the tree>')
     sys.exit(1)
 
   # pylint: disable=unbalanced-tuple-unpacking
@@ -40,7 +39,7 @@ def main():
     print(file=sys.stderr)
     return 1
 
-  print('Running clang-format 3-way merge driver on ' + file_name_in_tree)
+  print(f'Running clang-format 3-way merge driver on {file_name_in_tree}')
 
   try:
     tool = clang_format.FindClangFormatToolInChromiumTree()
@@ -55,8 +54,9 @@ def main():
       # up into the script as well.
       with open(fpath, 'rb') as input_file:
         output = subprocess.check_output(
-            [tool, '--assume-filename=%s' % file_name_in_tree, '--style=file'],
-            stdin=input_file)
+            [tool, f'--assume-filename={file_name_in_tree}', '--style=file'],
+            stdin=input_file,
+        )
       with open(fpath, 'wb') as output_file:
         output_file.write(output)
   except clang_format.NotFoundError as e:

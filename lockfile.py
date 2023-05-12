@@ -85,7 +85,7 @@ def _lock(path, timeout=0):
   elapsed = 0
   while True:
     try:
-      return _try_lock(path + '.locked')
+      return _try_lock(f'{path}.locked')
     except (OSError, IOError) as e:
       if elapsed < timeout:
         sleep_time = min(10, timeout - elapsed)
@@ -95,7 +95,7 @@ def _lock(path, timeout=0):
         elapsed += sleep_time
         time.sleep(sleep_time)
         continue
-      raise LockError("Error locking %s (err: %s)" % (path, str(e)))
+      raise LockError(f"Error locking {path} (err: {str(e)})")
 
 
 @contextlib.contextmanager

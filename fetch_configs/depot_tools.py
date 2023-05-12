@@ -25,7 +25,7 @@ class DepotTools(config_util.Config):
       'solutions': [solution],
     }
     checkout_type = 'gclient_git'
-    spec_type = '%s_spec' % checkout_type
+    spec_type = f'{checkout_type}_spec'
     return {
       'type': checkout_type,
       spec_type: spec,

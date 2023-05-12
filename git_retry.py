@@ -24,7 +24,7 @@ from git_common import GIT_EXE, GIT_TRANSIENT_ERRORS_RE
 class TeeThread(threading.Thread):
 
   def __init__(self, fd, out_fd, name):
-    super(TeeThread, self).__init__(name='git-retry.tee.%s' % (name,))
+    super(TeeThread, self).__init__(name=f'git-retry.tee.{name}')
     self.data = None
     self.fd = fd
     self.out_fd = out_fd

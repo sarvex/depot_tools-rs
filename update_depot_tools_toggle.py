@@ -24,13 +24,11 @@ def main():
       help='Disable auto-updating.')
   args = parser.parse_args()
 
-  if args.enable:
-    if os.path.exists(SENTINEL_PATH):
-      os.unlink(SENTINEL_PATH)
-  if args.disable:
-    if not os.path.exists(SENTINEL_PATH):
-      with open(SENTINEL_PATH, 'w') as fd:
-        fd.write('Disabled by %s at %s\n' % (__file__, datetime.datetime.now()))
+  if args.enable and os.path.exists(SENTINEL_PATH):
+    os.unlink(SENTINEL_PATH)
+  if args.disable and not os.path.exists(SENTINEL_PATH):
+    with open(SENTINEL_PATH, 'w') as fd:
+      fd.write('Disabled by %s at %s\n' % (__file__, datetime.datetime.now()))
   return 0
 
 

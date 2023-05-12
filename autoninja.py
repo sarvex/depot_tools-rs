@@ -212,14 +212,12 @@ def main(args):
         # (crbug.com/936864).
         j_value = min(j_value, 800)
 
-      args.append('%d' % j_value)
     else:
       j_value = num_cores
       # Ninja defaults to |num_cores + 2|
       j_value += int(os.environ.get('NINJA_CORE_ADDITION', '2'))
       args.append('-j')
-      args.append('%d' % j_value)
-
+    args.append('%d' % j_value)
   # On Windows, fully quote the path so that the command processor doesn't think
   # the whole output is the command.
   # On Linux and Mac, if people put depot_tools in directories with ' ',
@@ -239,11 +237,12 @@ def main(args):
       and os.path.exists(reclient_cfg)):
     bootstrap = os.path.join(reclient_bin_dir, 'bootstrap')
     setup_args = [
-        bootstrap, '--cfg=' + reclient_cfg,
-        '--re_proxy=' + os.path.join(reclient_bin_dir, 'reproxy')
+        bootstrap,
+        f'--cfg={reclient_cfg}',
+        '--re_proxy=' + os.path.join(reclient_bin_dir, 'reproxy'),
     ]
 
-    teardown_args = [bootstrap, '--cfg=' + reclient_cfg, '--shutdown']
+    teardown_args = [bootstrap, f'--cfg={reclient_cfg}', '--shutdown']
 
     cmd_sep = '\n' if sys.platform.startswith('win') else '&&'
     args = setup_args + [cmd_sep] + args + [cmd_sep] + teardown_args

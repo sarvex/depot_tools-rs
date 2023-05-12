@@ -39,14 +39,14 @@ def parse_options():
   args = parser.parse_args()
 
   if not os.path.exists(args.repository):
-    parser.error('Repository "%s" does not exist.' % args.repository)
+    parser.error(f'Repository "{args.repository}" does not exist.')
 
   gclient = os.path.join(args.repository, '.gclient')
   if not os.path.exists(gclient):
-    parser.error('No .gclient file at "%s".' % gclient)
+    parser.error(f'No .gclient file at "{gclient}".')
 
   if os.path.exists(args.new_workdir):
-    parser.error('New workdir "%s" already exists.' % args.new_workdir)
+    parser.error(f'New workdir "{args.new_workdir}" already exists.')
 
   return args
 
@@ -95,11 +95,11 @@ def main():
   for root, dirs, _ in os.walk(args.repository):
     if '.git' in dirs:
       workdir = root.replace(args.repository, args.new_workdir, 1)
-      print('Creating: %s' % workdir)
+      print(f'Creating: {workdir}')
 
       if args.reflink:
         if not os.path.exists(workdir):
-          print('Copying: %s' % workdir)
+          print(f'Copying: {workdir}')
           subprocess.check_call(['cp', '-a', '--reflink', root, workdir])
         shutil.rmtree(os.path.join(workdir, '.git'))
 

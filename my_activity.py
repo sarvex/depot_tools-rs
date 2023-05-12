@@ -168,7 +168,7 @@ def get_week_of(date):
 
 def get_yes_or_no(msg):
   while True:
-    response = gclient_utils.AskForData(msg + ' yes/no [no] ')
+    response = gclient_utils.AskForData(f'{msg} yes/no [no] ')
     if response in ('y', 'yes'):
       return True
 
@@ -189,16 +189,15 @@ def extract_bug_numbers_from_description(issue):
   description = revision['commit']['message']
 
   bugs = []
-  # Handle both "Bug: 99999" and "BUG=99999" bug notations
-  # Multiple bugs can be noted on a single line or in multiple ones.
-  matches = re.findall(
+  if matches := re.findall(
       r'^(BUG=|(Bug|Fixed):\s*)((((?:[a-zA-Z0-9-]+:)?\d+)(,\s?)?)+)',
-      description, flags=re.IGNORECASE | re.MULTILINE)
-  if matches:
+      description,
+      flags=re.IGNORECASE | re.MULTILINE,
+  ):
     for match in matches:
       bugs.extend(match[2].replace(' ', '').split(','))
     # Add default chromium: prefix if none specified.
-    bugs = [bug if ':' in bug else 'chromium:%s' % bug for bug in bugs]
+    bugs = [bug if ':' in bug else f'chromium:{bug}' for bug in bugs]
 
   return sorted(set(bugs))
 
@@ -223,7 +222,7 @@ class MyActivity(object):
 
   def gerrit_changes_over_rest(self, instance, filters):
     # Convert the "key:value" filter to a list of (key, value) pairs.
-    req = list(f.split(':', 1) for f in filters)
+    req = [f.split(':', 1) for f in filters]
     try:
       # Instantiate the generator to force all the requests now and catch the
       # errors here.
@@ -239,13 +238,13 @@ class MyActivity(object):
   def gerrit_search(self, instance, owner=None, reviewer=None):
     if instance['url'] in self.skip_servers:
       return []
-    max_age = datetime.today() - self.modified_after
-    filters = ['-age:%ss' % (max_age.days * 24 * 3600 + max_age.seconds)]
+    max_age = datetime.now() - self.modified_after
+    filters = [f'-age:{max_age.days * 24 * 3600 + max_age.seconds}s']
     if owner:
       assert not reviewer
-      filters.append('owner:%s' % owner)
+      filters.append(f'owner:{owner}')
     else:
-      filters.extend(('-owner:%s' % reviewer, 'reviewer:%s' % reviewer))
+      filters.extend((f'-owner:{reviewer}', f'reviewer:{reviewer}'))
     # TODO(cjhopman): Should abandoned changes be filtered out when
     # merged_only is not enabled?
     if self.options.merged_only:
@@ -257,9 +256,7 @@ class MyActivity(object):
               for issue in issues]
 
     issues = filter(self.filter_issue, issues)
-    issues = sorted(issues, key=lambda i: i['modified'], reverse=True)
-
-    return issues
+    return sorted(issues, key=lambda i: i['modified'], reverse=True)
 
   def process_gerrit_issue(self, instance, issue):
     ret = {}
@@ -274,7 +271,7 @@ class MyActivity(object):
     else:
       protocol = 'https'
       url = instance['url']
-    ret['review_url'] = '%s://%s/%s' % (protocol, url, issue['_number'])
+    ret['review_url'] = f"{protocol}://{url}/{issue['_number']}"
 
     ret['header'] = issue['subject']
     ret['owner'] = issue['owner'].get('email', '')
@@ -285,23 +282,20 @@ class MyActivity(object):
       ret['replies'] = self.process_gerrit_issue_replies(issue['messages'])
     else:
       ret['replies'] = []
-    ret['reviewers'] = set(r['author'] for r in ret['replies'])
+    ret['reviewers'] = {r['author'] for r in ret['replies']}
     ret['reviewers'].discard(ret['author'])
     ret['bugs'] = extract_bug_numbers_from_description(issue)
     return ret
 
   @staticmethod
   def process_gerrit_issue_replies(replies):
-    ret = []
     replies = filter(lambda r: 'author' in r and 'email' in r['author'],
         replies)
-    for reply in replies:
-      ret.append({
+    return [{
         'author': reply['author']['email'],
         'created': datetime_from_gerrit(reply['date']),
         'content': reply['message'],
-      })
-    return ret
+    } for reply in replies]
 
   def monorail_get_auth_http(self):
     # Manually use a long timeout (10m); for some users who have a
@@ -345,10 +339,9 @@ class MyActivity(object):
 
   def monorail_query_issues(self, project, query):
     http = self.monorail_get_auth_http()
-    url = ('https://monorail-prod.appspot.com/_ah/api/monorail/v1/projects'
-           '/%s/issues') % project
+    url = f'https://monorail-prod.appspot.com/_ah/api/monorail/v1/projects/{project}/issues'
     query_data = urllib.parse.urlencode(query)
-    url = url + '?' + query_data
+    url = f'{url}?{query_data}'
     _, body = http.request(url)
     self.show_progress()
     content = json.loads(body)
@@ -356,8 +349,8 @@ class MyActivity(object):
       logging.error('Unable to parse %s response from monorail.', project)
       return []
 
-    issues = []
     project_config = monorail_projects.get(project, {})
+    issues = []
     for item in content.get('items', []):
       if project_config.get('shorturl'):
         protocol = project_config.get('short_url_protocol', 'http')
@@ -367,21 +360,18 @@ class MyActivity(object):
         item_url = 'https://bugs.chromium.org/p/%s/issues/detail?id=%d' % (
             project, item['id'])
       issue = {
-        'uid': '%s:%s' % (project, item['id']),
-        'header': item['title'],
-        'created': datetime_from_monorail(item['published']),
-        'modified': datetime_from_monorail(item['updated']),
-        'author': item['author']['name'],
-        'url': item_url,
-        'comments': [],
-        'status': item['status'],
-        'labels': [],
-        'components': []
+          'uid': f"{project}:{item['id']}",
+          'header': item['title'],
+          'created': datetime_from_monorail(item['published']),
+          'modified': datetime_from_monorail(item['updated']),
+          'author': item['author']['name'],
+          'url': item_url,
+          'comments': [],
+          'status': item['status'],
+          'labels': [],
+          'components': [],
       }
-      if 'owner' in item:
-        issue['owner'] = item['owner']['name']
-      else:
-        issue['owner'] = 'None'
+      issue['owner'] = item['owner']['name'] if 'owner' in item else 'None'
       if 'labels' in item:
         issue['labels'] = item['labels']
       if 'components' in item:
@@ -393,8 +383,8 @@ class MyActivity(object):
   def monorail_issue_search(self, project):
     epoch = datetime.utcfromtimestamp(0)
     # Defaults to @chromium.org email if one wasn't provided on -u option.
-    user_str = (self.options.email if self.options.email.find('@') >= 0
-                else '%s@chromium.org' % self.user)
+    user_str = (self.options.email if self.options.email.find('@') >= 0 else
+                f'{self.user}@chromium.org')
 
     issues = self.monorail_query_issues(project, {
       'maxResults': 10000,
@@ -416,8 +406,8 @@ class MyActivity(object):
 
   def monorail_get_issues(self, project, issue_ids):
     return self.monorail_query_issues(project, {
-      'maxResults': 10000,
-      'q': 'id:%s' % ','.join(issue_ids)
+        'maxResults': 10000,
+        'q': f"id:{','.join(issue_ids)}"
     })
 
   def print_heading(self, heading):
@@ -427,7 +417,7 @@ class MyActivity(object):
   def match(self, author):
     if '@' in self.user:
       return author == self.user
-    return author.startswith(self.user + '@')
+    return author.startswith(f'{self.user}@')
 
   def print_change(self, change):
     activity = len([
@@ -507,13 +497,14 @@ class MyActivity(object):
         'modified': modified,
     }
     if optional_values is not None:
-      values.update(optional_values)
+      values |= optional_values
     print(DefaultFormatter().format(output_format, **values))
 
 
   def filter_issue(self, issue, should_filter_by_user=True):
     def maybe_filter_username(email):
       return not should_filter_by_user or username(email) == self.user
+
     if (maybe_filter_username(issue['author']) and
         self.filter_modified(issue['created'])):
       return True
@@ -526,7 +517,7 @@ class MyActivity(object):
         if not should_filter_by_user:
           break
         if (username(reply['author']) == self.user
-            or (self.user + '@') in reply['content']):
+            or f'{self.user}@' in reply['content']):
           break
     else:
       return False
@@ -603,7 +594,7 @@ class MyActivity(object):
 
     referenced_issue_uids = set(itertools.chain.from_iterable(
       change['bugs'] for change in self.changes))
-    fetched_issue_uids = set(issue['uid'] for issue in self.issues)
+    fetched_issue_uids = {issue['uid'] for issue in self.issues}
     missing_issue_uids = referenced_issue_uids - fetched_issue_uids
 
     missing_issues_by_project = collections.defaultdict(list)
@@ -682,18 +673,18 @@ class MyActivity(object):
       for item in in_array:
         url = item.get('url') or item.get('review_url')
         if not url:
-          raise Exception('Dumped item %s does not specify url' % item)
-        output[url] = dict(
-            (k, v) for k,v in item.items() if k not in ignore_keys)
+          raise Exception(f'Dumped item {item} does not specify url')
+        output[url] = {k: v for k,v in item.items() if k not in ignore_keys}
       return output
+
+
 
     class PythonObjectEncoder(json.JSONEncoder):
       def default(self, o):  # pylint: disable=method-hidden
         if isinstance(o, datetime):
           return o.isoformat()
-        if isinstance(o, set):
-          return list(o)
-        return json.JSONEncoder.default(self, o)
+        return list(o) if isinstance(o, set) else json.JSONEncoder.default(self, o)
+
 
     output = {
       'reviews': format_for_json_dump(self.reviews),
@@ -716,8 +707,8 @@ def main():
   parser.add_option(
       '-e', '--end', metavar='<date>',
       help='Filter issues created before the date (mm/dd/yy)')
-  quarter_begin, quarter_end = get_quarter_of(datetime.today() -
-                                              relativedelta(months=2))
+  quarter_begin, quarter_end = get_quarter_of(
+      (datetime.now() - relativedelta(months=2)))
   parser.add_option(
       '-Q', '--last_quarter', action='store_true',
       help='Use last quarter\'s dates, i.e. %s to %s' % (
@@ -882,30 +873,26 @@ def main():
   except ImportError:
     logging.warning('Consider installing python-keyring')
 
-  if not options.begin:
-    if options.last_quarter:
-      begin, end = quarter_begin, quarter_end
-    elif options.this_year:
-      begin, end = get_year_of(datetime.today())
-    elif options.week_of:
-      begin, end = (get_week_of(datetime.strptime(options.week_of, '%m/%d/%y')))
-    elif options.last_week:
-      begin, end = (get_week_of(datetime.today() -
-                                timedelta(days=1 + 7 * options.last_week)))
-    else:
-      begin, end = (get_week_of(datetime.today() - timedelta(days=1)))
-  else:
+  if options.begin:
     begin = dateutil.parser.parse(options.begin)
-    if options.end:
-      end = dateutil.parser.parse(options.end)
-    else:
-      end = datetime.today()
+    end = dateutil.parser.parse(options.end) if options.end else datetime.now()
+  elif options.last_quarter:
+    begin, end = quarter_begin, quarter_end
+  elif options.this_year:
+    begin, end = get_year_of(datetime.now())
+  elif options.week_of:
+    begin, end = (get_week_of(datetime.strptime(options.week_of, '%m/%d/%y')))
+  elif options.last_week:
+    begin, end = get_week_of(
+        (datetime.now() - timedelta(days=1 + 7 * options.last_week)))
+  else:
+    begin, end = get_week_of(datetime.now() - timedelta(days=1))
   options.begin, options.end = begin, end
   if begin >= end:
     # The queries fail in peculiar ways when the begin date is in the future.
     # Give a descriptive error message instead.
-    logging.error('Start date (%s) is the same or later than end date (%s)' %
-                  (begin, end))
+    logging.error(
+        f'Start date ({begin}) is the same or later than end date ({end})')
     return 1
 
   if options.markdown:
@@ -934,8 +921,8 @@ def main():
   my_activity = MyActivity(options)
   my_activity.show_progress('Loading data')
 
-  if not (options.changes or options.reviews or options.issues or
-          options.changes_by_issue):
+  if (not options.changes and not options.reviews and not options.issues
+      and not options.changes_by_issue):
     options.changes = True
     options.issues = True
     options.reviews = True

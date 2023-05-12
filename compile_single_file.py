@@ -26,7 +26,7 @@ def path_to_source_root(path):
       os.path.isdir(os.path.join(candidate, fp)) for fp in fingerprints):
     new_candidate = os.path.dirname(candidate)
     if new_candidate == candidate:
-      raise Exception("Couldn't find source-dir from %s" % path)
+      raise Exception(f"Couldn't find source-dir from {path}")
     candidate = os.path.dirname(candidate)
   return candidate
 
@@ -49,7 +49,7 @@ def main():
   abs_build_dir = os.path.join(src_dir, options.build_dir)
   src_relpath = os.path.relpath(options.file_path, abs_build_dir)
 
-  print('Building %s' % options.file_path)
+  print(f'Building {options.file_path}')
 
   ninja_exec = 'ninja'
   carets = '^'
@@ -62,11 +62,7 @@ def main():
     # character.
     carets = '^^'
 
-  command = [
-      ninja_exec,
-      '-C', abs_build_dir,
-      '%s%s' % (src_relpath, carets)
-  ]
+  command = [ninja_exec, '-C', abs_build_dir, f'{src_relpath}{carets}']
   # |shell| should be set to True on Windows otherwise the carets characters
   # get dropped from the command line.
   return subprocess.call(command, shell=sys.platform=='win32')

@@ -12,7 +12,7 @@ def depot_tools_version():
     commit_hash = subprocess.check_output(['git', 'rev-parse', 'HEAD'],
                                           cwd=depot_tools_root).decode(
                                               'utf-8', 'ignore')
-    return 'git-%s' % commit_hash
+    return f'git-{commit_hash}'
   except Exception:
     pass
 

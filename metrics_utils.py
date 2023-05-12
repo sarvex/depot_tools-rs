@@ -194,9 +194,7 @@ def get_git_version():
       stdout=subprocess2.PIPE, stderr=subprocess2.PIPE)
   stdout, _ = p.communicate()
   match = GIT_VERSION_RE.match(stdout.decode('utf-8'))
-  if not match:
-    return None
-  return '%s.%s.%s' % match.groups()
+  return None if not match else '%s.%s.%s' % match.groups()
 
 
 def get_bot_metrics():
@@ -219,9 +217,7 @@ def return_code_from_exception(exception):
   """Returns the exit code that would result of raising the exception."""
   if exception is None:
     return 0
-  if isinstance(exception[1], SystemExit):
-    return exception[1].code
-  return 1
+  return exception[1].code if isinstance(exception[1], SystemExit) else 1
 
 
 def extract_known_subcommand_args(args):
@@ -274,12 +270,9 @@ def extract_http_metrics(request_uri, method, status, response_time):
 
   parsed_query = urlparse.parse_qs(parsed_url.query)
 
-  # Collect o-parameters from the request.
-  args = [
-    arg for arg in parsed_query.get('o', [])
-    if arg in KNOWN_HTTP_ARGS
-  ]
-  if args:
+  if args := [
+      arg for arg in parsed_query.get('o', []) if arg in KNOWN_HTTP_ARGS
+  ]:
     http_metrics['arguments'] = args
 
   return http_metrics
@@ -305,10 +298,7 @@ def get_repo_timestamp(path_to_repo):
   stdout, _ = p.communicate()
 
   # If there was an error, give up.
-  if p.returncode != 0:
-    return None
-
-  return stdout.strip()
+  return None if p.returncode != 0 else stdout.strip()
 
 def print_boxed_text(out, min_width, lines):
   [EW, NS, SE, SW, NE, NW] = list('=|++++')

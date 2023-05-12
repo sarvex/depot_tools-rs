@@ -45,12 +45,13 @@ def main(args):
   # thereof), but instead reference the default python from the PATH.
   PruneVirtualEnv()
 
-  # Try in primary solution location first, with the gn binary having been
-  # downloaded by cipd in the projects DEPS.
-  primary_solution_path = gclient_paths.GetPrimarySolutionPath()
-  if primary_solution_path:
-    gn_path = os.path.join(primary_solution_path, 'third_party',
-                           'gn', 'gn' + gclient_paths.GetExeSuffix())
+  if primary_solution_path := gclient_paths.GetPrimarySolutionPath():
+    gn_path = os.path.join(
+        primary_solution_path,
+        'third_party',
+        'gn',
+        f'gn{gclient_paths.GetExeSuffix()}',
+    )
     if os.path.exists(gn_path):
       return subprocess.call([gn_path] + args[1:])
 
@@ -61,10 +62,9 @@ def main(args):
     print('gn.py: Could not find checkout in any parent of the current path.\n'
           'This must be run inside a checkout.', file=sys.stderr)
     return 1
-  gn_path = os.path.join(bin_path, 'gn' + gclient_paths.GetExeSuffix())
+  gn_path = os.path.join(bin_path, f'gn{gclient_paths.GetExeSuffix()}')
   if not os.path.exists(gn_path):
-    print(
-        'gn.py: Could not find gn executable at: %s' % gn_path, file=sys.stderr)
+    print(f'gn.py: Could not find gn executable at: {gn_path}', file=sys.stderr)
     return 2
   return subprocess.call([gn_path] + args[1:])
 

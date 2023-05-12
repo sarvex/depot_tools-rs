@@ -39,7 +39,7 @@ class Config(object):
 
     bad_parms = [x for x in argv[2:] if not looks_like_arg(x)]
     if bad_parms:
-      print('Got bad arguments %s' % bad_parms)
+      print(f'Got bad arguments {bad_parms}')
       return 1
 
     method = methods[argv[1]]

@@ -26,8 +26,7 @@ def CMDthaw(parser, args):
 
 def main(args):
   dispatcher = subcommand.CommandDispatcher(__name__)
-  ret = dispatcher.execute(optparse.OptionParser(), args)
-  if ret:
+  if ret := dispatcher.execute(optparse.OptionParser(), args):
     print(ret)
   return 0
 

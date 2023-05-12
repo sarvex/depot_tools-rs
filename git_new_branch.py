@@ -23,23 +23,22 @@ def create_new_branch(
         raise Exception('no current branch')
       above = git_common.upstream(below)
       if above is None:
-        raise Exception('branch %s has no upstream' % (below))
+        raise Exception(f'branch {below} has no upstream')
       git_common.run('checkout', '--track', above, '-b', branch_name)
       git_common.run('branch', '--set-upstream-to', branch_name, below)
     elif upstream_current:
       git_common.run('checkout', '--track', '-b', branch_name)
+    elif upstream in git_common.tags():
+      # TODO(iannucci): ensure that basis_ref is an ancestor of HEAD?
+      git_common.run(
+          'checkout', '--no-track', '-b', branch_name,
+          git_common.hash_one(upstream))
+      git_common.set_config(f'branch.{branch_name}.remote', '.')
+      git_common.set_config(f'branch.{branch_name}.merge', upstream)
     else:
-      if upstream in git_common.tags():
-        # TODO(iannucci): ensure that basis_ref is an ancestor of HEAD?
-        git_common.run(
-            'checkout', '--no-track', '-b', branch_name,
-            git_common.hash_one(upstream))
-        git_common.set_config('branch.%s.remote' % branch_name, '.')
-        git_common.set_config('branch.%s.merge' % branch_name, upstream)
-      else:
-        # TODO(iannucci): Detect unclean workdir then stash+pop if we need to
-        # teleport to a conflicting portion of history?
-        git_common.run('checkout', '--track', upstream, '-b', branch_name)
+      # TODO(iannucci): Detect unclean workdir then stash+pop if we need to
+      # teleport to a conflicting portion of history?
+      git_common.run('checkout', '--track', upstream, '-b', branch_name)
     git_common.get_or_create_merge_base(branch_name)
   except subprocess2.CalledProcessError as cpe:
     sys.stdout.write(cpe.stdout.decode('utf-8', 'replace'))

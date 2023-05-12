@@ -51,24 +51,23 @@ def get_md5(filename):
   md5_calculator = hashlib.md5()
   with open(filename, 'rb') as f:
     while True:
-      chunk = f.read(1024*1024)
-      if not chunk:
+      if chunk := f.read(1024 * 1024):
+        md5_calculator.update(chunk)
+      else:
         break
-      md5_calculator.update(chunk)
   return md5_calculator.hexdigest()
 
 
 def get_md5_cached(filename):
   """Don't calculate the MD5 if we can find a .md5 file."""
   # See if we can find an existing MD5 sum stored in a file.
-  if os.path.exists('%s.md5' % filename):
-    with open('%s.md5' % filename, 'rb') as f:
-      md5_match = re.search('([a-z0-9]{32})', f.read().decode())
-      if md5_match:
-        return md5_match.group(1)
+  if os.path.exists(f'{filename}.md5'):
+    with open(f'{filename}.md5', 'rb') as f:
+      if md5_match := re.search('([a-z0-9]{32})', f.read().decode()):
+        return md5_match[1]
   else:
     md5_hash = get_md5(filename)
-    with open('%s.md5' % filename, 'wb') as f:
+    with open(f'{filename}.md5', 'wb') as f:
       f.write(md5_hash.encode())
     return md5_hash
 
@@ -80,21 +79,17 @@ def _upload_worker(
     filename, sha1_sum = upload_queue.get()
     if not filename:
       break
-    file_url = '%s/%s' % (base_url, sha1_sum)
+    file_url = f'{base_url}/{sha1_sum}'
     if gsutil.check_call('ls', file_url)[0] == 0 and not force:
       # File exists, check MD5 hash.
       _, out, _ = gsutil.check_call_with_retries('ls', '-L', file_url)
-      etag_match = re.search(r'ETag:\s+\S+', out)
-      if etag_match:
+      if etag_match := re.search(r'ETag:\s+\S+', out):
         stdout_queue.put(
             '%d> File with url %s already exists' % (thread_num, file_url))
-        remote_md5 = etag_match.group(0).split()[1]
+        remote_md5 = etag_match[0].split()[1]
         # Calculate the MD5 checksum to match it to Google Storage's ETag.
         with md5_lock:
-          if use_md5:
-            local_md5 = get_md5_cached(filename)
-          else:
-            local_md5 = get_md5(filename)
+          local_md5 = get_md5_cached(filename) if use_md5 else get_md5(filename)
         if local_md5 == remote_md5:
           stdout_queue.put(
               '%d> File %s already exists and MD5 matches, upload skipped' %
@@ -116,15 +111,15 @@ def _upload_worker(
 
     # Mark executable files with the header "x-goog-meta-executable: 1" which
     # the download script will check for to preserve the executable bit.
-    if not sys.platform.startswith('win'):
-      if os.stat(filename).st_mode & stat.S_IEXEC:
-        code, _, err = gsutil.check_call_with_retries(
-            'setmeta', '-h', 'x-goog-meta-executable:1', file_url)
-        if code != 0:
-          ret_codes.put(
-              (code,
-               'Encountered error on setting metadata on %s\n%s' %
-               (file_url, err)))
+    if (not sys.platform.startswith('win')
+        and os.stat(filename).st_mode & stat.S_IEXEC):
+      code, _, err = gsutil.check_call_with_retries(
+          'setmeta', '-h', 'x-goog-meta-executable:1', file_url)
+      if code != 0:
+        ret_codes.put(
+            (code,
+             'Encountered error on setting metadata on %s\n%s' %
+             (file_url, err)))
 
 
 def get_targets(args, parser, use_null_terminator):
@@ -172,24 +167,23 @@ def upload_to_google_storage(
   has_missing_files = False
   for filename in input_filenames:
     if not os.path.exists(filename):
-      stdout_queue.put('Main> Error: %s not found, skipping.' % filename)
+      stdout_queue.put(f'Main> Error: {filename} not found, skipping.')
       has_missing_files = True
       continue
-    if os.path.exists('%s.sha1' % filename) and skip_hashing:
-      stdout_queue.put(
-          'Main> Found hash for %s, sha1 calculation skipped.' % filename)
-      with open(filename + '.sha1', 'rb') as f:
+    if os.path.exists(f'{filename}.sha1') and skip_hashing:
+      stdout_queue.put(f'Main> Found hash for {filename}, sha1 calculation skipped.')
+      with open(f'{filename}.sha1', 'rb') as f:
         sha1_file = f.read(1024)
       if not re.match('^([a-z0-9]{40})$', sha1_file.decode()):
-        print('Invalid sha1 hash file %s.sha1' % filename, file=sys.stderr)
+        print(f'Invalid sha1 hash file {filename}.sha1', file=sys.stderr)
         return 1
       upload_queue.put((filename, sha1_file.decode()))
       continue
-    stdout_queue.put('Main> Calculating hash for %s...' % filename)
+    stdout_queue.put(f'Main> Calculating hash for {filename}...')
     sha1_sum = get_sha1(filename)
-    with open(filename + '.sha1', 'wb') as f:
+    with open(f'{filename}.sha1', 'wb') as f:
       f.write(sha1_sum.encode())
-    stdout_queue.put('Main> Done calculating hash for %s.' % filename)
+    stdout_queue.put(f'Main> Done calculating hash for {filename}.')
     upload_queue.put((filename, sha1_sum))
   hashing_duration = time.time() - hashing_start
 
@@ -225,7 +219,7 @@ def upload_to_google_storage(
 def create_archives(dirs):
   archive_names = []
   for name in dirs:
-    tarname = '%s.tar.gz' % name
+    tarname = f'{name}.tar.gz'
     with tarfile.open(tarname, 'w:gz') as tar:
       tar.add(name)
     archive_names.append(tarname)
@@ -299,10 +293,11 @@ def main():
       if os.path.exists(path) and 'gsutil' in os.listdir(path):
         gsutil = Gsutil(os.path.join(path, 'gsutil'), boto_path=options.boto)
     if not gsutil:
-      parser.error('gsutil not found in %s, bad depot_tools checkout?' %
-                   GSUTIL_DEFAULT_PATH)
+      parser.error(
+          f'gsutil not found in {GSUTIL_DEFAULT_PATH}, bad depot_tools checkout?'
+      )
 
-  base_url = 'gs://%s' % options.bucket
+  base_url = f'gs://{options.bucket}'
 
   return upload_to_google_storage(
       input_filenames, base_url, gsutil, options.force, options.use_md5,

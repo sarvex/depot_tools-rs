@@ -96,7 +96,7 @@ class Target:
         # Allow for modest floating-point errors
         epsilon = 0.000002
         if (self.weighted_duration > self.Duration() + epsilon):
-          print('%s > %s?' % (self.weighted_duration, self.Duration()))
+            print(f'{self.weighted_duration} > {self.Duration()}?')
         assert(self.weighted_duration <= self.Duration() + epsilon)
         return self.weighted_duration
 
@@ -108,7 +108,7 @@ class Target:
         result = ', '.join(self.targets)
         max_length = 65
         if len(result) > max_length:
-          result = result[:max_length] + '...'
+            result = f'{result[:max_length]}...'
         return result
 
 
@@ -160,50 +160,50 @@ def ReadTargets(log, show_all):
 
 
 def GetExtension(target, extra_patterns):
-  """Return the file extension that best represents a target.
+    """Return the file extension that best represents a target.
 
   For targets that generate multiple outputs it is important to return a
   consistent 'canonical' extension. Ultimately the goal is to group build steps
   by type."""
-  for output in target.targets:
-    if extra_patterns:
-      for fn_pattern in extra_patterns.split(';'):
-        if fnmatch.fnmatch(output, '*' + fn_pattern + '*'):
-          return fn_pattern
-    # Not a true extension, but a good grouping.
-    if output.endswith('type_mappings'):
-      extension = 'type_mappings'
-      break
+    for output in target.targets:
+        if extra_patterns:
+            for fn_pattern in extra_patterns.split(';'):
+                if fnmatch.fnmatch(output, f'*{fn_pattern}*'):
+                    return fn_pattern
+        # Not a true extension, but a good grouping.
+        if output.endswith('type_mappings'):
+          extension = 'type_mappings'
+          break
 
-    # Capture two extensions if present. For example: file.javac.jar should be
-    # distinguished from file.interface.jar.
-    root, ext1 = os.path.splitext(output)
-    _, ext2 = os.path.splitext(root)
-    extension = ext2 + ext1 # Preserve the order in the file name.
+        # Capture two extensions if present. For example: file.javac.jar should be
+        # distinguished from file.interface.jar.
+        root, ext1 = os.path.splitext(output)
+        _, ext2 = os.path.splitext(root)
+        extension = ext2 + ext1 # Preserve the order in the file name.
 
-    if len(extension) == 0:
-      extension = '(no extension found)'
+        if len(extension) == 0:
+          extension = '(no extension found)'
 
-    if ext1 in ['.pdb', '.dll', '.exe']:
-      extension = 'PEFile (linking)'
-      # Make sure that .dll and .exe are grouped together and that the
-      # .dll.lib files don't cause these to be listed as libraries
-      break
-    if ext1 in ['.so', '.TOC']:
-      extension = '.so (linking)'
-      # Attempt to identify linking, avoid identifying as '.TOC'
-      break
-    # Make sure .obj files don't get categorized as mojo files
-    if ext1 in ['.obj', '.o']:
-      break
-    # Jars are the canonical output of java targets.
-    if ext1 == '.jar':
-      break
-    # Normalize all mojo related outputs to 'mojo'.
-    if output.count('.mojom') > 0:
-      extension = 'mojo'
-      break
-  return extension
+        if ext1 in ['.pdb', '.dll', '.exe']:
+          extension = 'PEFile (linking)'
+          # Make sure that .dll and .exe are grouped together and that the
+          # .dll.lib files don't cause these to be listed as libraries
+          break
+        if ext1 in ['.so', '.TOC']:
+          extension = '.so (linking)'
+          # Attempt to identify linking, avoid identifying as '.TOC'
+          break
+        # Make sure .obj files don't get categorized as mojo files
+        if ext1 in ['.obj', '.o']:
+          break
+        # Jars are the canonical output of java targets.
+        if ext1 == '.jar':
+          break
+        # Normalize all mojo related outputs to 'mojo'.
+        if output.count('.mojom') > 0:
+          extension = 'mojo'
+          break
+    return extension
 
 
 def SummarizeEntries(entries, extra_step_types):
@@ -221,13 +221,14 @@ def SummarizeEntries(entries, extra_step_types):
     latest = 0
     total_cpu_time = 0
     for target in entries:
-      if earliest < 0 or target.start < earliest:
-        earliest = target.start
-      if target.end > latest:
-        latest = target.end
-      total_cpu_time += target.Duration()
-      task_start_stop_times.append((target.start, 'start', target))
-      task_start_stop_times.append((target.end, 'stop', target))
+        if earliest < 0 or target.start < earliest:
+          earliest = target.start
+        if target.end > latest:
+          latest = target.end
+        total_cpu_time += target.Duration()
+        task_start_stop_times.extend(
+            ((target.start, 'start', target), (target.end, 'stop', target))
+        )
     length = latest - earliest
     weighted_total = 0.0
 
@@ -263,7 +264,7 @@ def SummarizeEntries(entries, extra_step_types):
         weighted_total += weighted_duration
         del running_tasks[target]
       last_time = time
-    assert(len(running_tasks) == 0)
+    assert not running_tasks
 
     # Warn if the sum of weighted times is off by more than half a second.
     if abs(length - weighted_total) > 500:

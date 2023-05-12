@@ -85,7 +85,7 @@ class _Config(object):
       # check if we can reach the page. An external developer would get access
       # denied.
       try:
-        req = urllib.urlopen(metrics_utils.APP_URL + '/should-upload')
+        req = urllib.urlopen(f'{metrics_utils.APP_URL}/should-upload')
         self._config['is-googler'] = req.getcode() == 200
       except (urllib.URLError, urllib.HTTPError):
         self._config['is-googler'] = False
@@ -145,17 +145,13 @@ class _Config(object):
     if self.opted_in is False:
       return False
     # Don't report metrics if countdown hasn't reached 0.
-    if self.opted_in is None and self.countdown > 0:
-      return False
-    return True
+    return self.opted_in is not None or self.countdown <= 0
 
   def decrease_countdown(self):
     self._ensure_initialized()
     if self.countdown == 0:
       return
     self._config['countdown'] -= 1
-    if self.countdown == 0:
-      self._config['version'] = metrics_utils.CURRENT_VERSION
     self._write_config()
 
   def reset_config(self):
@@ -248,12 +244,10 @@ class MetricsCollector(object):
     if depot_tools_age is not None:
       self.add('depot_tools_age', int(depot_tools_age))
 
-    git_version = metrics_utils.get_git_version()
-    if git_version:
+    if git_version := metrics_utils.get_git_version():
       self.add('git_version', git_version)
 
-    bot_metrics = metrics_utils.get_bot_metrics()
-    if bot_metrics:
+    if bot_metrics := metrics_utils.get_bot_metrics():
       self.add('bot_metrics', bot_metrics)
 
     self._upload_metrics_data()

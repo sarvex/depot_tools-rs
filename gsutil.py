@@ -43,7 +43,7 @@ class InvalidGsutilError(Exception):
 
 def download_gsutil(version, target_dir):
   """Downloads gsutil into the target_dir."""
-  filename = 'gsutil_%s.zip' % version
+  filename = f'gsutil_{version}.zip'
   target_filename = os.path.join(target_dir, filename)
 
   # Check if the target exists already.
@@ -51,13 +51,13 @@ def download_gsutil(version, target_dir):
     md5_calc = hashlib.md5()
     with open(target_filename, 'rb') as f:
       while True:
-        buf = f.read(4096)
-        if not buf:
+        if buf := f.read(4096):
+          md5_calc.update(buf)
+        else:
           break
-        md5_calc.update(buf)
     local_md5 = md5_calc.hexdigest()
 
-    metadata_url = '%s%s' % (API_URL, filename)
+    metadata_url = f'{API_URL}{filename}'
     metadata = json.load(urllib.urlopen(metadata_url))
     remote_md5 = base64.b64decode(metadata['md5Hash']).decode('utf-8')
 
@@ -66,14 +66,14 @@ def download_gsutil(version, target_dir):
     os.remove(target_filename)
 
   # Do the download.
-  url = '%s%s' % (GSUTIL_URL, filename)
+  url = f'{GSUTIL_URL}{filename}'
   u = urllib.urlopen(url)
   with open(target_filename, 'wb') as f:
     while True:
-      buf = u.read(4096)
-      if not buf:
+      if buf := u.read(4096):
+        f.write(buf)
+      else:
         break
-      f.write(buf)
   return target_filename
 
 
@@ -88,7 +88,7 @@ def temporary_directory(base):
 
 
 def ensure_gsutil(version, target, clean):
-  bin_dir = os.path.join(target, 'gsutil_%s' % version)
+  bin_dir = os.path.join(target, f'gsutil_{version}')
   gsutil_bin = os.path.join(bin_dir, 'gsutil', 'gsutil')
   gsutil_flag = os.path.join(bin_dir, 'gsutil', 'install.flag')
   # We assume that if gsutil_flag exists, then we have a good version

@@ -54,15 +54,15 @@ def need_to_update(branch):
   subprocess.check_call(
       ['git', 'fetch', 'origin'], cwd=INFRA_DIR,
       stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-  origin_rev = get_git_rev(INFRA_DIR, 'origin/%s' % (branch,))
+  origin_rev = get_git_rev(INFRA_DIR, f'origin/{branch}')
   return origin_rev != local_rev
 
 
 def ensure_infra(branch):
   """Ensures that infra.git is present in ~/.chrome-infra."""
   sys.stderr.write(
-      'Fetching infra@%s into %s, may take a couple of minutes...' % (
-      branch, TARGET_DIR))
+      f'Fetching infra@{branch} into {TARGET_DIR}, may take a couple of minutes...'
+  )
   sys.stderr.flush()
   if not os.path.isdir(TARGET_DIR):
     os.mkdir(TARGET_DIR)
@@ -72,9 +72,10 @@ def ensure_infra(branch):
         cwd=TARGET_DIR,
         stdout=subprocess.DEVNULL)
   subprocess.check_call(
-      [sys.executable, GCLIENT, 'sync', '--revision', 'origin/%s' % (branch,)],
+      [sys.executable, GCLIENT, 'sync', '--revision', f'origin/{branch}'],
       cwd=TARGET_DIR,
-      stdout=subprocess.DEVNULL)
+      stdout=subprocess.DEVNULL,
+  )
   sys.stderr.write(' done.\n')
   sys.stderr.flush()
 
@@ -89,16 +90,13 @@ def is_exe(filename):
 
 def get_available_tools():
   """Returns a tuple of (list of infra tools, list of cipd tools)"""
-  infra_tools = []
-  cipd_tools = []
   starting = os.path.join(INFRA_DIR, 'infra', 'tools')
-  for root, _, files in os.walk(starting):
-    if '__main__.py' in files:
-      infra_tools.append(root[len(starting)+1:].replace(os.path.sep, '.'))
+  infra_tools = [
+      root[len(starting) + 1:].replace(os.path.sep, '.')
+      for root, _, files in os.walk(starting) if '__main__.py' in files
+  ]
   cipd = os.path.join(INFRA_DIR, 'cipd')
-  for fn in os.listdir(cipd):
-    if is_exe(os.path.join(cipd, fn)):
-      cipd_tools.append(fn)
+  cipd_tools = [fn for fn in os.listdir(cipd) if is_exe(os.path.join(cipd, fn))]
   return (sorted(infra_tools), sorted(cipd_tools))
 
 
@@ -112,12 +110,12 @@ def usage():
 
   Available infra tools are:""")
   for tool in infra_tools:
-    print('  * %s' % tool)
+    print(f'  * {tool}')
 
   print("""
   Available cipd tools are:""")
   for tool in cipd_tools:
-    print('  * %s' % tool)
+    print(f'  * {tool}')
 
 
 def run(args):
@@ -135,8 +133,12 @@ def run(args):
   if (os.path.isdir(tool_dir)
       and os.path.isfile(os.path.join(tool_dir, '__main__.py'))):
     cmd = [
-        'vpython', '-vpython-spec', os.path.join(INFRA_DIR, '.vpython'),
-        '-m', 'infra.tools.%s' % tool_name]
+        'vpython',
+        '-vpython-spec',
+        os.path.join(INFRA_DIR, '.vpython'),
+        '-m',
+        f'infra.tools.{tool_name}',
+    ]
 
     # Augment PYTHONPATH so that infra.tools.<tool_name> can be found without
     # running from that directory, which would mess up any relative paths passed
@@ -145,7 +147,7 @@ def run(args):
   elif os.path.isfile(cipd_file) and is_exe(cipd_file):
     cmd = [cipd_file]
   else:
-    print('Unknown tool "%s"' % tool_name, file=sys.stderr)
+    print(f'Unknown tool "{tool_name}"', file=sys.stderr)
     return usage()
 
   # Add the remaining arguments.
